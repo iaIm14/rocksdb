@@ -3,10 +3,10 @@
 //  COPYING file in the root directory) and Apache 2.0 License
 //  (found in the LICENSE.Apache file in the root directory).
 
-
 #include "options/options_parser.h"
 
 #include <cmath>
+#include <iostream>
 #include <map>
 #include <string>
 #include <utility>
@@ -60,6 +60,9 @@ Status PersistRocksDBOptions(const ConfigOptions& config_options_in,
   ConfigOptions config_options = config_options_in;
   config_options.delimiter = "\n  ";  // Override the default to nl
 
+  using std::cout;
+  using std::endl;
+  cout << "PersistRocksDB Options begin: param = " << file_name << endl;
   TEST_SYNC_POINT("PersistRocksDBOptions:start");
   if (cf_names.size() != cf_opts.size()) {
     return Status::InvalidArgument(
@@ -67,8 +70,7 @@ Status PersistRocksDBOptions(const ConfigOptions& config_options_in,
   }
   std::unique_ptr<FSWritableFile> wf;
 
-  Status s =
-      fs->NewWritableFile(file_name, FileOptions(), &wf, nullptr);
+  Status s = fs->NewWritableFile(file_name, FileOptions(), &wf, nullptr);
   if (!s.ok()) {
     return s;
   }
@@ -96,6 +98,7 @@ Status PersistRocksDBOptions(const ConfigOptions& config_options_in,
 
   if (s.ok()) {
     s = GetStringFromDBOptions(config_options, db_opt, &options_file_content);
+    cout << "DEBUG1: " << options_file_content << endl;
   }
   if (s.ok()) {
     s = writable->Append(options_file_content + "\n");
@@ -108,6 +111,7 @@ Status PersistRocksDBOptions(const ConfigOptions& config_options_in,
     if (s.ok()) {
       s = GetStringFromColumnFamilyOptions(config_options, cf_opts[i],
                                            &options_file_content);
+      cout << "DEBUG2: " << options_file_content << endl;
     }
     if (s.ok()) {
       s = writable->Append(options_file_content + "\n");
@@ -256,8 +260,8 @@ Status RocksDBOptionsParser::Parse(const ConfigOptions& config_options_in,
   ConfigOptions config_options = config_options_in;
 
   std::unique_ptr<FSSequentialFile> seq_file;
-  Status s = fs->NewSequentialFile(file_name, FileOptions(), &seq_file,
-                                   nullptr);
+  Status s =
+      fs->NewSequentialFile(file_name, FileOptions(), &seq_file, nullptr);
   if (!s.ok()) {
     return s;
   }
@@ -351,9 +355,8 @@ Status RocksDBOptionsParser::CheckSection(const OptionSection section,
   } else if (section == kOptionSectionTableOptions) {
     if (GetCFOptions(section_arg) == nullptr) {
       return InvalidArgument(
-          line_num, std::string(
-                        "Does not find a matched column family name in "
-                        "TableOptions section.  Column Family Name:") +
+          line_num, std::string("Does not find a matched column family name in "
+                                "TableOptions section.  Column Family Name:") +
                         section_arg);
     }
   } else if (section == kOptionSectionVersion) {
@@ -722,4 +725,3 @@ Status RocksDBOptionsParser::VerifyTableFactory(
   return Status::OK();
 }
 }  // namespace ROCKSDB_NAMESPACE
-
