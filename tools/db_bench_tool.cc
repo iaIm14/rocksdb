@@ -4567,12 +4567,16 @@ class Benchmark {
     // were not configured already, settings that require dynamically invoking
     // APIs, and settings for the benchmark itself.
     Options& options = *opts;
-
+    using std::cout;
+    using std::endl;
     // Always set these since they are harmless when not needed and prevent
     // a guaranteed failure when they are needed.
     options.create_missing_column_families = true;
     options.create_if_missing = true;
-
+    // cout << "DEBUG4: no set true" << ' ' << "CHECK: "
+    //      << (options.create_missing_column_families == true ? " ISTRUE"
+    //                                                         : "ISFALSE")
+    //      << endl;
     if (options.statistics == nullptr) {
       options.statistics = dbstats;
     }
