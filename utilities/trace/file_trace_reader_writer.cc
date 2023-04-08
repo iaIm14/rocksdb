@@ -10,7 +10,7 @@
 #include "file/writable_file_writer.h"
 #include "trace_replay/trace_replay.h"
 #include "util/coding.h"
-
+#include "util/logger.hpp"
 namespace ROCKSDB_NAMESPACE {
 
 const unsigned int FileTraceReader::kBufferSize = 1024;  // 1KB
@@ -123,6 +123,7 @@ Status NewFileTraceWriter(Env* env, const EnvOptions& env_options,
   Status s = WritableFileWriter::Create(env->GetFileSystem(), trace_filename,
                                         FileOptions(env_options), &file_writer,
                                         nullptr);
+  LOG("trace_filename= ", trace_filename);
   if (!s.ok()) {
     return s;
   }

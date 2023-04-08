@@ -347,6 +347,8 @@ Tracer::Tracer(SystemClock* clock, const TraceOptions& trace_options,
       trace_writer_(std::move(trace_writer)),
       trace_request_count_(0) {
   // TODO: What if this fails?
+
+  LOG("Test Tracer Init");
   WriteHeader().PermitUncheckedError();
 }
 
@@ -598,7 +600,10 @@ Status Tracer::WriteHeader() {
   trace.ts = clock_->NowMicros();
   trace.type = kTraceBegin;
   trace.payload = header;
-  return WriteTrace(trace);
+  LOG("Header want to write:= ", s.str());
+
+  Status ret = WriteTrace(trace);
+  return ret;
 }
 
 Status Tracer::WriteFooter() {

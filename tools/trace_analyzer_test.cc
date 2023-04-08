@@ -57,14 +57,7 @@ class TraceAnalyzerTest : public testing::Test {
     env_ = ROCKSDB_NAMESPACE::Env::Default();
     env_->CreateDir(test_path_).PermitUncheckedError();
     NewEnvLogger("./logger.log", env_, &_log_warn);
-    using std::cout;
-    using std::endl;
     _log_warn->SetInfoLogLevel(rocksdb::InfoLogLevel::INFO_LEVEL);
-    if (_log_warn->GetInfoLogLevel() == rocksdb::InfoLogLevel::INFO_LEVEL) {
-      cout << "check log level info" << endl;
-    } else {
-      cout << "check log level info failed" << endl;
-    }
     dbname_ = test_path_ + "/db";
     ROCKS_LOG_INFO(_log_warn, "TraceAnalyzerTest construct DB name = %s",
                    dbname_.c_str());

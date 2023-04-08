@@ -20,7 +20,7 @@
 #include "test_util/testutil.h"
 #include "util/random.h"
 
-// #ifdef GFLAGS
+#ifdef GFLAGS
 #include "util/gflags_compat.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -66,8 +66,6 @@ class DBBenchTest : public testing::Test {
   // specified here; the ones by the DB are set via SanitizeOptions
   Options GetDefaultOptions(CompactionStyle style = kCompactionStyleLevel,
                             int levels = 7) const {
-    using std::cout;
-    using std::endl;
     Options opt;
 
     opt.create_if_missing = true;
@@ -78,18 +76,12 @@ class DBBenchTest : public testing::Test {
     opt.compaction_style = style;
     opt.num_levels = levels;
     opt.compression = Snappy_Supported() ? kSnappyCompression : kNoCompression;
-    cout << (opt.compression == kSnappyCompression ? "check kSnappyCompression"
-                                                   : "check kNoCompression")
-         << endl;
     opt.arena_block_size = 8388608;
 
     return SanitizeOptions(db_path_, opt);
   }
 
   void RunDbBench(const std::string& options_file_name) {
-    using std::cout;
-    using std::endl;
-    cout << "options_file_name" << options_file_name << endl;
     AppendArgs({"./db_bench", "--benchmarks=fillseq", "--use_existing_db=0",
                 "--num=1000", "--compression_type=none",
                 std::string(std::string("--db=") + db_path_).c_str(),
@@ -100,31 +92,18 @@ class DBBenchTest : public testing::Test {
   }
 
   void VerifyOptions(const Options& opt) {
-    using std::cout;
-    using std::endl;
     DBOptions loaded_db_opts;
     ConfigOptions config_opts;
     config_opts.ignore_unknown_options = false;
     config_opts.input_strings_escaped = true;
     config_opts.env = Env::Default();
     std::vector<ColumnFamilyDescriptor> cf_descs;
-    cout << "CHECK new opt before load= "
-         << (loaded_db_opts.create_missing_column_families == true
-                 ? "CREATE TRUE\n"
-                 : "CREATE FALSE\n");
     ASSERT_OK(
         LoadLatestOptions(config_opts, db_path_, &loaded_db_opts, &cf_descs));
 
     ConfigOptions exact;
     exact.input_strings_escaped = false;
     exact.sanity_level = ConfigOptions::kSanityLevelExactMatch;
-    cout << "CHECK default opt = "
-         << (opt.create_missing_column_families == true ? "CREATE TRUE\n"
-                                                        : "CREATE FALSE\n");
-    cout << "CHECK new opt = "
-         << (loaded_db_opts.create_missing_column_families == true
-                 ? "CREATE TRUE\n"
-                 : "CREATE FALSE\n");
 
     ASSERT_OK(RocksDBOptionsParser::VerifyDBOptions(exact, DBOptions(opt),
                                                     loaded_db_opts));
@@ -161,8 +140,6 @@ TEST_F(DBBenchTest, OptionsFile) {
   ASSERT_OK(PersistRocksDBOptions(DBOptions(opt), {"default"},
                                   {ColumnFamilyOptions(opt)}, kOptionsFileName,
                                   opt.env->GetFileSystem().get()));
-  using std::cout;
-  using std::endl;
   // cout << "check before run bench" << endl;
   // VerifyOptions(opt);
   // cout << "check before run bench finish" << endl;
@@ -172,9 +149,8 @@ TEST_F(DBBenchTest, OptionsFile) {
 
   RunDbBench(kOptionsFileName);
   opt.delayed_write_rate = 16 * 1024 * 1024;  // Set by SanitizeOptions
-  cout << "check after run bench" << endl;
-  // VerifyOptions(opt);
-  // cout << "check after run bench finish" << endl;
+
+  VerifyOptions(opt);
 }
 
 TEST_F(DBBenchTest, DISABLED_OptionsFileUniversal) {
@@ -367,10 +343,9 @@ int main(int argc, char** argv) {
   return RUN_ALL_TESTS();
 }
 
-// #else
+#else
 
-// int main(int argc, char** argv) {
-//   printf("Skip db_bench_tool_test as the required library GFLAG is
-//   missing.");
-// }
-// #endif  // #ifdef GFLAGS
+int main(int argc, char** argv) {
+  printf("Skip db_bench_tool_test as the required library GFLAG is missing.");
+}
+#endif  // #ifdef GFLAGS

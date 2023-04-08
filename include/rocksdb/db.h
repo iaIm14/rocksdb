@@ -30,6 +30,7 @@
 #include "rocksdb/types.h"
 #include "rocksdb/version.h"
 #include "rocksdb/wide_columns.h"
+#include "util/logger.hpp"
 
 #ifdef _WIN32
 // Windows API macro interference
@@ -1814,9 +1815,7 @@ class DB {
   // Trace DB operations. Use EndTrace() to stop tracing.
   virtual Status StartTrace(const TraceOptions& /*options*/,
                             std::unique_ptr<TraceWriter>&& /*trace_writer*/) {
-    using std::cout;
-    using std::endl;
-    cout << "ERROR: call Default virtual StartTrace" << endl;
+    LOG("ERROR: call Default virtual StartTrace");
     return Status::NotSupported("StartTrace() is not implemented.");
   }
 

@@ -590,6 +590,7 @@ endif()
 
 include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories(${PROJECT_SOURCE_DIR}/dev)
 
 if(USE_COROUTINES)
   if(USE_FOLLY OR USE_FOLLY_LITE)
@@ -1538,6 +1539,24 @@ if(WITH_TESTS)
       endif()
   endforeach(sourcefile ${TESTS})
 
+  set(DEVELOP 
+    dev/trace_query_test.cpp
+    dev/trace_io_test.cpp
+    dev/trace_block_cache_test.cpp
+  )
+  foreach(sourcefile ${DEVELOP})
+      message(STATUS "CHECK DEV: ${sourcefile}")
+      get_filename_component(exename ${sourcefile} NAME_WE)
+      add_executable(${exename}${ARTIFACT_SUFFIX} ${sourcefile})
+      set_target_properties(${exename}${ARTIFACT_SUFFIX}
+        PROPERTIES EXCLUDE_FROM_DEFAULT_BUILD_RELEASE 1
+        EXCLUDE_FROM_DEFAULT_BUILD_MINRELEASE 1
+        EXCLUDE_FROM_DEFAULT_BUILD_RELWITHDEBINFO 1
+        OUTPUT_NAME ${exename}${ARTIFACT_SUFFIX}
+      )
+      target_link_libraries(${exename}${ARTIFACT_SUFFIX} testutillib${ARTIFACT_SUFFIX} testharness gtest ${THIRDPARTY_LIBS} ${ROCKSDB_LIB})
+  endforeach(sourcefile ${DEVELOP})
+
   if(WIN32)
     # C executables must link to a shared object
     if(ROCKSDB_BUILD_SHARED)
@@ -1611,6 +1630,10 @@ if(WITH_TRACE_TOOLS)
     tools/trace_analyzer.cc)
   target_link_libraries(trace_analyzer${ARTIFACT_SUFFIX}
     ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS})
+  
+  add_executable(io_tracer_parser${ARTIFACT_SUFFIX} tools/io_tracer_parser.cc)
+  target_link_libraries(io_tracer_parser${ARTIFACT_SUFFIX}
+  ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS})
 
 endif()
 

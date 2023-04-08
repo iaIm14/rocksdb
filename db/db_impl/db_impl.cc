@@ -103,6 +103,7 @@
 #include "util/defer.h"
 #include "util/distributed_mutex.h"
 #include "util/hash_containers.h"
+#include "util/logger.hpp"
 #include "util/mutexlock.h"
 #include "util/stop_watch.h"
 #include "util/string_util.h"
@@ -5804,9 +5805,7 @@ void DBImpl::NotifyOnExternalFileIngested(
 
 Status DBImpl::StartTrace(const TraceOptions& trace_options,
                           std::unique_ptr<TraceWriter>&& trace_writer) {
-  using std::cout;
-  using std::endl;
-  cout << "Info: call DBImpl StartTrace" << endl;
+  LOG("Info: call DBImpl StartTrace");
   InstrumentedMutexLock lock(&trace_mutex_);
   tracer_.reset(new Tracer(immutable_db_options_.clock, trace_options,
                            std::move(trace_writer)));

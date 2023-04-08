@@ -4,7 +4,7 @@
 //  (found in the LICENSE.Apache file in the root directory).
 //
 
-// #ifdef GFLAGS
+#ifdef GFLAGS
 #ifdef NUMA
 #include <numa.h>
 #endif
@@ -42,6 +42,7 @@
 #include "util/coding.h"
 #include "util/compression.h"
 #include "util/gflags_compat.h"
+#include "util/logger.hpp"
 #include "util/random.h"
 #include "util/string_util.h"
 
@@ -462,6 +463,8 @@ Status TraceAnalyzer::StartProcessing() {
     return s;
   }
   trace_create_time_ = header.ts;
+  LOG("Analyze Header Info ", trace_file_version, " ", trace_create_time_, ' ',
+      db_version_);
   if (FLAGS_output_time_series) {
     time_series_start_ = header.ts;
   }
@@ -775,8 +778,12 @@ Status TraceAnalyzer::MakeStatisticQPS() {
   if (begin_time_ == 0) {
     begin_time_ = trace_create_time_;
   }
-  uint32_t duration =
-      static_cast<uint32_t>((end_time_ - begin_time_) / 1000000);
+  auto duration = static_cast<uint32_t>((end_time_ - begin_time_) / 1000000);
+  if (duration == 0) {  // TODO(iaIm14): Warning when duration too short
+    LOG("Need Fix Duration");
+  }
+  LOG("Start Cal Qps: time = ", duration);
+
   int ret;
   Status s;
   std::vector<std::vector<uint32_t>> type_qps(
@@ -1925,4 +1932,4 @@ int trace_analyzer_tool(int argc, char** argv) {
 
 }  // namespace ROCKSDB_NAMESPACE
 
-// #endif  // Endif of Gflag
+#endif  // Endif of Gflag

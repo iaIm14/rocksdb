@@ -60,9 +60,7 @@ Status PersistRocksDBOptions(const ConfigOptions& config_options_in,
   ConfigOptions config_options = config_options_in;
   config_options.delimiter = "\n  ";  // Override the default to nl
 
-  using std::cout;
-  using std::endl;
-  cout << "PersistRocksDB Options begin: param = " << file_name << endl;
+  LOG("PersistRocksDB Options begin: param = ", file_name);
   TEST_SYNC_POINT("PersistRocksDBOptions:start");
   if (cf_names.size() != cf_opts.size()) {
     return Status::InvalidArgument(
@@ -98,7 +96,6 @@ Status PersistRocksDBOptions(const ConfigOptions& config_options_in,
 
   if (s.ok()) {
     s = GetStringFromDBOptions(config_options, db_opt, &options_file_content);
-    cout << "DEBUG1: " << options_file_content << endl;
   }
   if (s.ok()) {
     s = writable->Append(options_file_content + "\n");
@@ -111,7 +108,6 @@ Status PersistRocksDBOptions(const ConfigOptions& config_options_in,
     if (s.ok()) {
       s = GetStringFromColumnFamilyOptions(config_options, cf_opts[i],
                                            &options_file_content);
-      cout << "DEBUG2: " << options_file_content << endl;
     }
     if (s.ok()) {
       s = writable->Append(options_file_content + "\n");
