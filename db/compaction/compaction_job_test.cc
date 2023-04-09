@@ -3,7 +3,6 @@
 //  COPYING file in the root directory) and Apache 2.0 License
 //  (found in the LICENSE.Apache file in the root directory).
 
-
 #include "db/compaction/compaction_job.h"
 
 #include <algorithm>
@@ -215,7 +214,8 @@ class CompactionJobTestBase : public testing::Test {
             dbname_, &db_options_, env_options_, table_cache_.get(),
             &write_buffer_manager_, &write_controller_,
             /*block_cache_tracer=*/nullptr,
-            /*io_tracer=*/nullptr, /*db_id*/ "", /*db_session_id*/ "")),
+            /*io_tracer=*/nullptr, /*memtable_tracer*/ nullptr, /*db_id*/ "",
+            /*db_session_id*/ "")),
         shutting_down_(false),
         mock_table_factory_(new mock::MockTableFactory()),
         error_handler_(nullptr, db_options_, &mutex_),
@@ -542,6 +542,7 @@ class CompactionJobTestBase : public testing::Test {
         new VersionSet(dbname_, &db_options_, env_options_, table_cache_.get(),
                        &write_buffer_manager_, &write_controller_,
                        /*block_cache_tracer=*/nullptr, /*io_tracer=*/nullptr,
+                       /*memtable_tracer*/ nullptr,
                        /*db_id*/ "", /*db_session_id*/ ""));
     compaction_job_stats_.Reset();
     ASSERT_OK(SetIdentityFile(env_, dbname_));
@@ -2440,4 +2441,3 @@ int main(int argc, char** argv) {
   RegisterCustomObjects(argc, argv);
   return RUN_ALL_TESTS();
 }
-

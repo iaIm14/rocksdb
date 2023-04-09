@@ -59,8 +59,6 @@
 //   Store per-table metadata (smallest, largest, largest-seq#, ...)
 //   in the table's meta section to speed up ScanTable.
 
-#include "db/version_builder.h"
-
 #include <cinttypes>
 
 #include "db/builder.h"
@@ -70,6 +68,7 @@
 #include "db/log_writer.h"
 #include "db/memtable.h"
 #include "db/table_cache.h"
+#include "db/version_builder.h"
 #include "db/version_edit.h"
 #include "db/write_batch_internal.h"
 #include "file/filename.h"
@@ -113,15 +112,16 @@ class Repairer {
             // TableCache can be small since we expect each table to be opened
             // once.
             NewLRUCache(10, db_options_.table_cache_numshardbits)),
-        table_cache_(new TableCache(default_iopts_, &file_options_,
-                                    raw_table_cache_.get(),
-                                    /*block_cache_tracer=*/nullptr,
-                                    /*io_tracer=*/nullptr, db_session_id_)),
+        table_cache_(new TableCache(
+            default_iopts_, &file_options_, raw_table_cache_.get(),
+            /*block_cache_tracer=*/nullptr,
+            /*memtable_tracer*/ nullptr, db_session_id_)),
         wb_(db_options_.db_write_buffer_size),
         wc_(db_options_.delayed_write_rate),
         vset_(dbname_, &immutable_db_options_, file_options_,
               raw_table_cache_.get(), &wb_, &wc_,
               /*block_cache_tracer=*/nullptr, /*io_tracer=*/nullptr,
+              /*memtable_tracer*/ nullptr,
               /*db_id=*/"", db_session_id_),
         next_file_number_(1),
         db_lock_(nullptr),
@@ -400,8 +400,8 @@ class Repairer {
       }
       Status record_status = WriteBatchInternal::SetContents(&batch, record);
       if (record_status.ok()) {
-        record_status =
-            WriteBatchInternal::InsertInto(&batch, cf_mems, nullptr, nullptr);
+        record_status = WriteBatchInternal::InsertInto(
+            &batch, cf_mems, nullptr, nullptr, /*MemtableTracer= */ nullptr);
       }
       if (record_status.ok()) {
         counter += WriteBatchInternal::Count(&batch);
@@ -809,4 +809,3 @@ Status RepairDB(const std::string& dbname, const Options& options) {
 }
 
 }  // namespace ROCKSDB_NAMESPACE
-

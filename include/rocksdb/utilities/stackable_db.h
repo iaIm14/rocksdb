@@ -9,6 +9,8 @@
 #include <string>
 
 #include "rocksdb/db.h"
+#include "rocksdb/options.h"
+#include "rocksdb/trace_reader_writer.h"
 
 #ifdef _WIN32
 // Windows API macro interference
@@ -394,7 +396,6 @@ class StackableDB : public DB {
 
   virtual Status UnlockWAL() override { return db_->UnlockWAL(); }
 
-
   virtual Status DisableFileDeletions() override {
     return db_->DisableFileDeletions();
   }
@@ -464,7 +465,6 @@ class StackableDB : public DB {
                             std::unique_ptr<Replayer>* replayer) override {
     return db_->NewDefaultReplayer(handles, std::move(reader), replayer);
   }
-
 
   virtual Status GetLiveFiles(std::vector<std::string>& vec, uint64_t* mfs,
                               bool flush_memtable = true) override {

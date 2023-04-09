@@ -128,6 +128,7 @@ class FlushJobTestBase : public testing::Test {
         new VersionSet(dbname_, &db_options_, env_options_, table_cache_.get(),
                        &write_buffer_manager_, &write_controller_,
                        /*block_cache_tracer=*/nullptr, /*io_tracer=*/nullptr,
+                       /*memtable_tracer*/ nullptr,
                        /*db_id*/ "", /*db_session_id*/ ""));
     EXPECT_OK(versions_->Recover(column_families, false));
   }
@@ -172,7 +173,8 @@ TEST_F(FlushJobTest, Empty) {
       snapshot_checker, &job_context, FlushReason::kTest, nullptr, nullptr,
       nullptr, kNoCompression, nullptr, &event_logger, false,
       true /* sync_output_directory */, true /* write_manifest */,
-      Env::Priority::USER, nullptr /*IOTracer*/, empty_seqno_to_time_mapping_);
+      Env::Priority::USER, nullptr /*IOTracer*/, nullptr,
+      empty_seqno_to_time_mapping_);
   {
     InstrumentedMutexLock l(&mutex_);
     flush_job.PickMemTable();
@@ -197,7 +199,7 @@ TEST_F(FlushJobTest, NonEmpty) {
     std::string key(std::to_string((i + 1000) % 10000));
     std::string value("value" + key);
     ASSERT_OK(new_mem->Add(SequenceNumber(i), kTypeValue, key, value,
-                           nullptr /* kv_prot_info */));
+                           nullptr /* kv_prot_info */, nullptr));
     if ((i + 1000) % 10000 < 9995) {
       InternalKey internal_key(key, SequenceNumber(i), kTypeValue);
       inserted_keys.push_back({internal_key.Encode().ToString(), value});
@@ -206,7 +208,7 @@ TEST_F(FlushJobTest, NonEmpty) {
 
   {
     ASSERT_OK(new_mem->Add(SequenceNumber(10000), kTypeRangeDeletion, "9995",
-                           "9999a", nullptr /* kv_prot_info */));
+                           "9999a", nullptr /* kv_prot_info */, nullptr));
     InternalKey internal_key("9995", SequenceNumber(10000), kTypeRangeDeletion);
     inserted_keys.push_back({internal_key.Encode().ToString(), "9999a"});
   }
@@ -234,7 +236,7 @@ TEST_F(FlushJobTest, NonEmpty) {
 
     const SequenceNumber seq(i + 10001);
     ASSERT_OK(new_mem->Add(seq, kTypeBlobIndex, key, blob_index,
-                           nullptr /* kv_prot_info */));
+                           nullptr /* kv_prot_info */, nullptr));
 
     InternalKey internal_key(key, seq, kTypeBlobIndex);
     inserted_keys.push_back({internal_key.Encode().ToString(), blob_index});
@@ -258,7 +260,8 @@ TEST_F(FlushJobTest, NonEmpty) {
       snapshot_checker, &job_context, FlushReason::kTest, nullptr, nullptr,
       nullptr, kNoCompression, db_options_.statistics.get(), &event_logger,
       true, true /* sync_output_directory */, true /* write_manifest */,
-      Env::Priority::USER, nullptr /*IOTracer*/, empty_seqno_to_time_mapping_);
+      Env::Priority::USER, nullptr /*IOTracer*/, nullptr,
+      empty_seqno_to_time_mapping_);
 
   HistogramData hist;
   FileMetaData file_meta;
@@ -298,7 +301,7 @@ TEST_F(FlushJobTest, FlushMemTablesSingleColumnFamily) {
       std::string key(std::to_string(j + i * num_keys_per_table));
       std::string value("value" + key);
       ASSERT_OK(mem->Add(SequenceNumber(j + i * num_keys_per_table), kTypeValue,
-                         key, value, nullptr /* kv_prot_info */));
+                         key, value, nullptr /* kv_prot_info */, nullptr));
     }
   }
 
@@ -321,7 +324,8 @@ TEST_F(FlushJobTest, FlushMemTablesSingleColumnFamily) {
       snapshot_checker, &job_context, FlushReason::kTest, nullptr, nullptr,
       nullptr, kNoCompression, db_options_.statistics.get(), &event_logger,
       true, true /* sync_output_directory */, true /* write_manifest */,
-      Env::Priority::USER, nullptr /*IOTracer*/, empty_seqno_to_time_mapping_);
+      Env::Priority::USER, nullptr /*IOTracer*/, nullptr,
+      empty_seqno_to_time_mapping_);
   HistogramData hist;
   FileMetaData file_meta;
   mutex_.Lock();
@@ -372,7 +376,7 @@ TEST_F(FlushJobTest, FlushMemtablesMultipleColumnFamilies) {
         std::string key(std::to_string(j + i * num_keys_per_memtable));
         std::string value("value" + key);
         ASSERT_OK(mem->Add(curr_seqno++, kTypeValue, key, value,
-                           nullptr /* kv_prot_info */));
+                           nullptr /* kv_prot_info */, nullptr));
       }
       mem->ConstructFragmentedRangeTombstones();
       cfd->imm()->Add(mem, &to_delete);
@@ -394,7 +398,7 @@ TEST_F(FlushJobTest, FlushMemtablesMultipleColumnFamilies) {
         &job_context, FlushReason::kTest, nullptr, nullptr, nullptr,
         kNoCompression, db_options_.statistics.get(), &event_logger, true,
         false /* sync_output_directory */, false /* write_manifest */,
-        Env::Priority::USER, nullptr /*IOTracer*/,
+        Env::Priority::USER, nullptr /*IOTracer*/, nullptr,
         empty_seqno_to_time_mapping_));
     k++;
   }
@@ -490,7 +494,7 @@ TEST_F(FlushJobTest, Snapshots) {
       std::string value(rnd.HumanReadableString(10));
       auto seqno = ++current_seqno;
       ASSERT_OK(new_mem->Add(SequenceNumber(seqno), kTypeValue, key, value,
-                             nullptr /* kv_prot_info */));
+                             nullptr /* kv_prot_info */, nullptr));
       // a key is visible only if:
       // 1. it's the last one written (j == insertions - 1)
       // 2. there's a snapshot pointing at it
@@ -521,7 +525,8 @@ TEST_F(FlushJobTest, Snapshots) {
       snapshot_checker, &job_context, FlushReason::kTest, nullptr, nullptr,
       nullptr, kNoCompression, db_options_.statistics.get(), &event_logger,
       true, true /* sync_output_directory */, true /* write_manifest */,
-      Env::Priority::USER, nullptr /*IOTracer*/, empty_seqno_to_time_mapping_);
+      Env::Priority::USER, nullptr /*IOTracer*/, nullptr,
+      empty_seqno_to_time_mapping_);
   mutex_.Lock();
   flush_job.PickMemTable();
   ASSERT_OK(flush_job.Run());
@@ -554,7 +559,7 @@ TEST_F(FlushJobTest, GetRateLimiterPriorityForWrite) {
       std::string key(std::to_string(j + i * num_keys_per_table));
       std::string value("value" + key);
       ASSERT_OK(mem->Add(SequenceNumber(j + i * num_keys_per_table), kTypeValue,
-                         key, value, nullptr /* kv_prot_info */));
+                         key, value, nullptr /* kv_prot_info */, nullptr));
     }
   }
 
@@ -577,7 +582,8 @@ TEST_F(FlushJobTest, GetRateLimiterPriorityForWrite) {
       snapshot_checker, &job_context, FlushReason::kTest, nullptr, nullptr,
       nullptr, kNoCompression, db_options_.statistics.get(), &event_logger,
       true, true /* sync_output_directory */, true /* write_manifest */,
-      Env::Priority::USER, nullptr /*IOTracer*/, empty_seqno_to_time_mapping_);
+      Env::Priority::USER, nullptr /*IOTracer*/, nullptr,
+      empty_seqno_to_time_mapping_);
 
   // When the state from WriteController is normal.
   ASSERT_EQ(flush_job.GetRateLimiterPriorityForWrite(), Env::IO_HIGH);
@@ -612,7 +618,7 @@ class FlushJobTimestampTest : public FlushJobTestBase {
     std::string key_str(std::move(key));
     PutFixed64(&key_str, ts);
     ASSERT_OK(memtable->Add(seq, value_type, key_str, value,
-                            nullptr /* kv_prot_info */));
+                            nullptr /* kv_prot_info */, nullptr));
   }
 
  protected:
@@ -657,7 +663,8 @@ TEST_F(FlushJobTimestampTest, AllKeysExpired) {
       snapshot_checker, &job_context, FlushReason::kTest, nullptr, nullptr,
       nullptr, kNoCompression, db_options_.statistics.get(), &event_logger,
       true, true /* sync_output_directory */, true /* write_manifest */,
-      Env::Priority::USER, nullptr /*IOTracer*/, empty_seqno_to_time_mapping_,
+      Env::Priority::USER, nullptr /*IOTracer*/, nullptr,
+      empty_seqno_to_time_mapping_,
       /*db_id=*/"",
       /*db_session_id=*/"", full_history_ts_low);
 
@@ -710,7 +717,8 @@ TEST_F(FlushJobTimestampTest, NoKeyExpired) {
       snapshot_checker, &job_context, FlushReason::kTest, nullptr, nullptr,
       nullptr, kNoCompression, db_options_.statistics.get(), &event_logger,
       true, true /* sync_output_directory */, true /* write_manifest */,
-      Env::Priority::USER, nullptr /*IOTracer*/, empty_seqno_to_time_mapping_,
+      Env::Priority::USER, nullptr /*IOTracer*/, nullptr,
+      empty_seqno_to_time_mapping_,
       /*db_id=*/"",
       /*db_session_id=*/"", full_history_ts_low);
 

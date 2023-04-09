@@ -1075,11 +1075,13 @@ class Version {
   // used for debugging and logging purposes only.
   uint64_t version_number_;
   std::shared_ptr<IOTracer> io_tracer_;
+  std::shared_ptr<MemtableTracer> memtable_tracer_;
   bool use_async_io_;
 
   Version(ColumnFamilyData* cfd, VersionSet* vset, const FileOptions& file_opt,
           MutableCFOptions mutable_cf_options,
           const std::shared_ptr<IOTracer>& io_tracer,
+          const std::shared_ptr<MemtableTracer>& memtable_tracer,
           uint64_t version_number = 0,
           EpochNumberRequirement epoch_number_requirement =
               EpochNumberRequirement::kMustPresent);
@@ -1122,6 +1124,7 @@ class VersionSet {
              WriteController* write_controller,
              BlockCacheTracer* const block_cache_tracer,
              const std::shared_ptr<IOTracer>& io_tracer,
+             const std::shared_ptr<MemtableTracer>& memtable_tracer,
              const std::string& db_id, const std::string& db_session_id);
   // No copying allowed
   VersionSet(const VersionSet&) = delete;
@@ -1255,7 +1258,6 @@ class VersionSet {
   // printf contents (for debugging)
   Status DumpManifest(Options& options, std::string& manifestFileName,
                       bool verbose, bool hex = false, bool json = false);
-
 
   const std::string& DbSessionId() const { return db_session_id_; }
 
@@ -1478,7 +1480,8 @@ class VersionSet {
 
     const auto& mutable_cf_options = *cfd->GetLatestMutableCFOptions();
     Version* const version =
-        new Version(cfd, this, file_options_, mutable_cf_options, io_tracer_);
+        new Version(cfd, this, file_options_, mutable_cf_options, io_tracer_,
+                    memtable_tracer_);
 
     constexpr bool update_stats = false;
     version->PrepareAppend(mutable_cf_options, update_stats);
@@ -1605,6 +1608,7 @@ class VersionSet {
   IOStatus io_status_;
 
   std::shared_ptr<IOTracer> io_tracer_;
+  std::shared_ptr<MemtableTracer> memtable_tracer_;
 
   std::string db_session_id_;
 
@@ -1634,7 +1638,8 @@ class ReactiveVersionSet : public VersionSet {
                      const FileOptions& _file_options, Cache* table_cache,
                      WriteBufferManager* write_buffer_manager,
                      WriteController* write_controller,
-                     const std::shared_ptr<IOTracer>& io_tracer);
+                     const std::shared_ptr<IOTracer>& io_tracer,
+                     const std::shared_ptr<MemtableTracer>& memtable_tracer);
 
   ~ReactiveVersionSet() override;
 

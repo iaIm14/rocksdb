@@ -872,6 +872,7 @@ set(SOURCES
         # tools/db_bench.cc
         trace_replay/block_cache_tracer.cc
         trace_replay/io_tracer.cc
+        trace_replay/memtable_tracer.cc
         trace_replay/trace_record_handler.cc
         trace_replay/trace_record_result.cc
         trace_replay/trace_record.cc

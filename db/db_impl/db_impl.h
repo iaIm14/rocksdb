@@ -590,6 +590,14 @@ class DBImpl : public DB {
   using DB::EndIOTrace;
   Status EndIOTrace() override;
 
+  using DB::StartMemtableTrace;
+  Status StartMemtableTrace(
+      const TraceOptions& options,
+      std::unique_ptr<TraceWriter>&& trace_writer) override;
+
+  using DB::EndMemtableTrace;
+  Status EndMemtableTrace() override;
+
   using DB::GetPropertiesOfAllTables;
   virtual Status GetPropertiesOfAllTables(
       ColumnFamilyHandle* column_family,
@@ -1263,6 +1271,7 @@ class DBImpl : public DB {
   const DBOptions initial_db_options_;
   Env* const env_;
   std::shared_ptr<IOTracer> io_tracer_;
+  std::shared_ptr<MemtableTracer> memtable_tracer_;
   const ImmutableDBOptions immutable_db_options_;
   FileSystemPtr fs_;
   MutableDBOptions mutable_db_options_;

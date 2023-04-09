@@ -103,7 +103,8 @@ class MemTableListTest : public testing::Test {
     VersionSet versions(dbname, &immutable_db_options, env_options,
                         table_cache.get(), &write_buffer_manager,
                         &write_controller, /*block_cache_tracer=*/nullptr,
-                        /*io_tracer=*/nullptr, /*db_id*/ "",
+                        /*io_tracer=*/nullptr, /*memtable_tracer*/ nullptr,
+                        /*db_id*/ "",
                         /*db_session_id*/ "");
     std::vector<ColumnFamilyDescriptor> cf_descs;
     cf_descs.emplace_back(kDefaultColumnFamilyName, ColumnFamilyOptions());
@@ -154,7 +155,8 @@ class MemTableListTest : public testing::Test {
     VersionSet versions(dbname, &immutable_db_options, env_options,
                         table_cache.get(), &write_buffer_manager,
                         &write_controller, /*block_cache_tracer=*/nullptr,
-                        /*io_tracer=*/nullptr, /*db_id*/ "",
+                        /*io_tracer=*/nullptr, /*memtable_tracer*/ nullptr,
+                        /*db_id*/ "",
                         /*db_session_id*/ "");
     std::vector<ColumnFamilyDescriptor> cf_descs;
     cf_descs.emplace_back(kDefaultColumnFamilyName, ColumnFamilyOptions());
@@ -204,7 +206,7 @@ class MemTableListTest : public testing::Test {
 
 TEST_F(MemTableListTest, Empty) {
   // Create an empty MemTableList and validate basic functions.
-  MemTableList list(1, 0, 0);
+  MemTableList list(1, 0, 0, nullptr);
 
   ASSERT_EQ(0, list.NumNotFlushed());
   ASSERT_FALSE(list.imm_flush_needed.load(std::memory_order_acquire));
@@ -227,7 +229,7 @@ TEST_F(MemTableListTest, GetTest) {
   int64_t max_write_buffer_size_to_maintain = 0;
   MemTableList list(min_write_buffer_number_to_merge,
                     max_write_buffer_number_to_maintain,
-                    max_write_buffer_size_to_maintain);
+                    max_write_buffer_size_to_maintain, nullptr);
 
   SequenceNumber seq = 1;
   std::string value;
@@ -255,21 +257,21 @@ TEST_F(MemTableListTest, GetTest) {
   mem->Ref();
 
   // Write some keys to this memtable.
-  ASSERT_OK(
-      mem->Add(++seq, kTypeDeletion, "key1", "", nullptr /* kv_prot_info */));
+  ASSERT_OK(mem->Add(++seq, kTypeDeletion, "key1", "",
+                     nullptr /* kv_prot_info */, nullptr));
   ASSERT_OK(mem->Add(++seq, kTypeValue, "key2", "value2",
-                     nullptr /* kv_prot_info */));
+                     nullptr /* kv_prot_info */, nullptr));
   ASSERT_OK(mem->Add(++seq, kTypeValue, "key1", "value1",
-                     nullptr /* kv_prot_info */));
+                     nullptr /* kv_prot_info */, nullptr));
   ASSERT_OK(mem->Add(++seq, kTypeValue, "key2", "value2.2",
-                     nullptr /* kv_prot_info */));
+                     nullptr /* kv_prot_info */, nullptr));
 
   // Fetch the newly written keys
   merge_context.Clear();
   found = mem->Get(LookupKey("key1", seq), &value, /*columns*/ nullptr,
                    /*timestamp*/ nullptr, &s, &merge_context,
                    &max_covering_tombstone_seq, ReadOptions(),
-                   false /* immutable_memtable */);
+                   false /* immutable_memtable */, nullptr);
   ASSERT_TRUE(s.ok() && found);
   ASSERT_EQ(value, "value1");
 
@@ -277,7 +279,7 @@ TEST_F(MemTableListTest, GetTest) {
   found = mem->Get(LookupKey("key1", 2), &value, /*columns*/ nullptr,
                    /*timestamp*/ nullptr, &s, &merge_context,
                    &max_covering_tombstone_seq, ReadOptions(),
-                   false /* immutable_memtable */);
+                   false /* immutable_memtable */, nullptr);
   // MemTable found out that this key is *not* found (at this sequence#)
   ASSERT_TRUE(found && s.IsNotFound());
 
@@ -285,7 +287,7 @@ TEST_F(MemTableListTest, GetTest) {
   found = mem->Get(LookupKey("key2", seq), &value, /*columns*/ nullptr,
                    /*timestamp*/ nullptr, &s, &merge_context,
                    &max_covering_tombstone_seq, ReadOptions(),
-                   false /* immutable_memtable */);
+                   false /* immutable_memtable */, nullptr);
   ASSERT_TRUE(s.ok() && found);
   ASSERT_EQ(value, "value2.2");
 
@@ -306,10 +308,10 @@ TEST_F(MemTableListTest, GetTest) {
                                 kMaxSequenceNumber, 0 /* column_family_id */);
   mem2->Ref();
 
-  ASSERT_OK(
-      mem2->Add(++seq, kTypeDeletion, "key1", "", nullptr /* kv_prot_info */));
+  ASSERT_OK(mem2->Add(++seq, kTypeDeletion, "key1", "",
+                      nullptr /* kv_prot_info */, nullptr));
   ASSERT_OK(mem2->Add(++seq, kTypeValue, "key2", "value2.3",
-                      nullptr /* kv_prot_info */));
+                      nullptr /* kv_prot_info */, nullptr));
 
   // Add second memtable to list
   // This is to make assert(memtable->IsFragmentedRangeTombstonesConstructed())
@@ -362,7 +364,7 @@ TEST_F(MemTableListTest, GetFromHistoryTest) {
   int64_t max_write_buffer_size_to_maintain = 2 * Arena::kInlineSize;
   MemTableList list(min_write_buffer_number_to_merge,
                     max_write_buffer_number_to_maintain,
-                    max_write_buffer_size_to_maintain);
+                    max_write_buffer_size_to_maintain, nullptr);
 
   SequenceNumber seq = 1;
   std::string value;
@@ -390,19 +392,19 @@ TEST_F(MemTableListTest, GetFromHistoryTest) {
   mem->Ref();
 
   // Write some keys to this memtable.
-  ASSERT_OK(
-      mem->Add(++seq, kTypeDeletion, "key1", "", nullptr /* kv_prot_info */));
+  ASSERT_OK(mem->Add(++seq, kTypeDeletion, "key1", "",
+                     nullptr /* kv_prot_info */, nullptr));
   ASSERT_OK(mem->Add(++seq, kTypeValue, "key2", "value2",
-                     nullptr /* kv_prot_info */));
+                     nullptr /* kv_prot_info */, nullptr));
   ASSERT_OK(mem->Add(++seq, kTypeValue, "key2", "value2.2",
-                     nullptr /* kv_prot_info */));
+                     nullptr /* kv_prot_info */, nullptr));
 
   // Fetch the newly written keys
   merge_context.Clear();
   found = mem->Get(LookupKey("key1", seq), &value, /*columns*/ nullptr,
                    /*timestamp*/ nullptr, &s, &merge_context,
                    &max_covering_tombstone_seq, ReadOptions(),
-                   false /* immutable_memtable */);
+                   false /* immutable_memtable */, nullptr);
   // MemTable found out that this key is *not* found (at this sequence#)
   ASSERT_TRUE(found && s.IsNotFound());
 
@@ -410,7 +412,7 @@ TEST_F(MemTableListTest, GetFromHistoryTest) {
   found = mem->Get(LookupKey("key2", seq), &value, /*columns*/ nullptr,
                    /*timestamp*/ nullptr, &s, &merge_context,
                    &max_covering_tombstone_seq, ReadOptions(),
-                   false /* immutable_memtable */);
+                   false /* immutable_memtable */, nullptr);
   ASSERT_TRUE(s.ok() && found);
   ASSERT_EQ(value, "value2.2");
 
@@ -489,10 +491,10 @@ TEST_F(MemTableListTest, GetFromHistoryTest) {
                                 kMaxSequenceNumber, 0 /* column_family_id */);
   mem2->Ref();
 
-  ASSERT_OK(
-      mem2->Add(++seq, kTypeDeletion, "key1", "", nullptr /* kv_prot_info */));
+  ASSERT_OK(mem2->Add(++seq, kTypeDeletion, "key1", "",
+                      nullptr /* kv_prot_info */, nullptr));
   ASSERT_OK(mem2->Add(++seq, kTypeValue, "key3", "value3",
-                      nullptr /* kv_prot_info */));
+                      nullptr /* kv_prot_info */, nullptr));
 
   // Add second memtable to list
   // This is to make assert(memtable->IsFragmentedRangeTombstonesConstructed())
@@ -600,7 +602,7 @@ TEST_F(MemTableListTest, FlushPendingTest) {
       7 * static_cast<int>(options.write_buffer_size);
   MemTableList list(min_write_buffer_number_to_merge,
                     max_write_buffer_number_to_maintain,
-                    max_write_buffer_size_to_maintain);
+                    max_write_buffer_size_to_maintain, nullptr);
 
   // Create some MemTables
   uint64_t memtable_id = 0;
@@ -616,15 +618,15 @@ TEST_F(MemTableListTest, FlushPendingTest) {
     MergeContext merge_context;
 
     ASSERT_OK(mem->Add(++seq, kTypeValue, "key1", std::to_string(i),
-                       nullptr /* kv_prot_info */));
+                       nullptr /* kv_prot_info */, nullptr));
     ASSERT_OK(mem->Add(++seq, kTypeValue, "keyN" + std::to_string(i), "valueN",
-                       nullptr /* kv_prot_info */));
+                       nullptr /* kv_prot_info */, nullptr));
     ASSERT_OK(mem->Add(++seq, kTypeValue, "keyX" + std::to_string(i), "value",
-                       nullptr /* kv_prot_info */));
+                       nullptr /* kv_prot_info */, nullptr));
     ASSERT_OK(mem->Add(++seq, kTypeValue, "keyM" + std::to_string(i), "valueM",
-                       nullptr /* kv_prot_info */));
+                       nullptr /* kv_prot_info */, nullptr));
     ASSERT_OK(mem->Add(++seq, kTypeDeletion, "keyX" + std::to_string(i), "",
-                       nullptr /* kv_prot_info */));
+                       nullptr /* kv_prot_info */, nullptr));
 
     tables.push_back(mem);
   }
@@ -898,9 +900,9 @@ TEST_F(MemTableListTest, AtomicFlusTest) {
       7 * static_cast<int64_t>(options.write_buffer_size);
   autovector<MemTableList*> lists;
   for (int i = 0; i != num_cfs; ++i) {
-    lists.emplace_back(new MemTableList(min_write_buffer_number_to_merge,
-                                        max_write_buffer_number_to_maintain,
-                                        max_write_buffer_size_to_maintain));
+    lists.emplace_back(new MemTableList(
+        min_write_buffer_number_to_merge, max_write_buffer_number_to_maintain,
+        max_write_buffer_size_to_maintain, nullptr));
   }
 
   autovector<uint32_t> cf_ids;
@@ -920,15 +922,15 @@ TEST_F(MemTableListTest, AtomicFlusTest) {
       std::string value;
 
       ASSERT_OK(mem->Add(++seq, kTypeValue, "key1", std::to_string(i),
-                         nullptr /* kv_prot_info */));
+                         nullptr /* kv_prot_info */, nullptr));
       ASSERT_OK(mem->Add(++seq, kTypeValue, "keyN" + std::to_string(i),
-                         "valueN", nullptr /* kv_prot_info */));
+                         "valueN", nullptr /* kv_prot_info */, nullptr));
       ASSERT_OK(mem->Add(++seq, kTypeValue, "keyX" + std::to_string(i), "value",
-                         nullptr /* kv_prot_info */));
+                         nullptr /* kv_prot_info */, nullptr));
       ASSERT_OK(mem->Add(++seq, kTypeValue, "keyM" + std::to_string(i),
-                         "valueM", nullptr /* kv_prot_info */));
+                         "valueM", nullptr /* kv_prot_info */, nullptr));
       ASSERT_OK(mem->Add(++seq, kTypeDeletion, "keyX" + std::to_string(i), "",
-                         nullptr /* kv_prot_info */));
+                         nullptr /* kv_prot_info */, nullptr));
 
       elem.push_back(mem);
     }

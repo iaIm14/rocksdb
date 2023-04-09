@@ -40,6 +40,7 @@
 #include "rocksdb/memtablerep.h"
 #include "rocksdb/transaction_log.h"
 #include "table/scoped_arena_iterator.h"
+#include "trace_replay/memtable_tracer.h"
 #include "util/autovector.h"
 #include "util/stop_watch.h"
 #include "util/thread_local.h"
@@ -73,6 +74,7 @@ class FlushJob {
            EventLogger* event_logger, bool measure_io_stats,
            const bool sync_output_directory, const bool write_manifest,
            Env::Priority thread_pri, const std::shared_ptr<IOTracer>& io_tracer,
+           const std::shared_ptr<MemtableTracer>& memtable_tracer,
            const SeqnoToTimeMapping& seq_time_mapping,
            const std::string& db_id = "", const std::string& db_session_id = "",
            std::string full_history_ts_low = "",
@@ -186,6 +188,7 @@ class FlushJob {
   Env::Priority thread_pri_;
 
   const std::shared_ptr<IOTracer> io_tracer_;
+  std::shared_ptr<MemtableTracer> memtable_tracer_;
   SystemClock* clock_;
 
   const std::string full_history_ts_low_;

@@ -12,6 +12,7 @@
 #include "db/error_handler.h"
 #include "db/event_helpers.h"
 #include "logging/logging.h"
+#include "monitoring/instrumented_mutex.h"
 #include "monitoring/perf_context_imp.h"
 #include "options/options_helper.h"
 #include "test_util/sync_point.h"
@@ -321,7 +322,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
           versions_->GetColumnFamilySet());
       w.status = WriteBatchInternal::InsertInto(
           &w, w.sequence, &column_family_memtables, &flush_scheduler_,
-          &trim_history_scheduler_,
+          &trim_history_scheduler_, memtable_tracer_,
           write_options.ignore_missing_column_families, 0 /*log_number*/, this,
           true /*concurrent_memtable_writes*/, seq_per_batch_, w.batch_cnt,
           batch_per_txn_, write_options.memtable_insert_hint_per_batch);
@@ -550,7 +551,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
         // w.sequence will be set inside InsertInto
         w.status = WriteBatchInternal::InsertInto(
             write_group, current_sequence, column_family_memtables_.get(),
-            &flush_scheduler_, &trim_history_scheduler_,
+            &flush_scheduler_, &trim_history_scheduler_, memtable_tracer_,
             write_options.ignore_missing_column_families,
             0 /*recovery_log_number*/, this, parallel, seq_per_batch_,
             batch_per_txn_);
@@ -567,7 +568,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
           assert(w.sequence == current_sequence);
           w.status = WriteBatchInternal::InsertInto(
               &w, w.sequence, &column_family_memtables, &flush_scheduler_,
-              &trim_history_scheduler_,
+              &trim_history_scheduler_, memtable_tracer_,
               write_options.ignore_missing_column_families, 0 /*log_number*/,
               this, true /*concurrent_memtable_writes*/, seq_per_batch_,
               w.batch_cnt, batch_per_txn_,
@@ -789,7 +790,7 @@ Status DBImpl::PipelinedWriteImpl(const WriteOptions& write_options,
     } else {
       memtable_write_group.status = WriteBatchInternal::InsertInto(
           memtable_write_group, w.sequence, column_family_memtables_.get(),
-          &flush_scheduler_, &trim_history_scheduler_,
+          &flush_scheduler_, &trim_history_scheduler_, memtable_tracer_,
           write_options.ignore_missing_column_families, 0 /*log_number*/, this,
           false /*concurrent_memtable_writes*/, seq_per_batch_, batch_per_txn_);
       versions_->SetLastSequence(memtable_write_group.last_sequence);
@@ -807,9 +808,10 @@ Status DBImpl::PipelinedWriteImpl(const WriteOptions& write_options,
         versions_->GetColumnFamilySet());
     w.status = WriteBatchInternal::InsertInto(
         &w, w.sequence, &column_family_memtables, &flush_scheduler_,
-        &trim_history_scheduler_, write_options.ignore_missing_column_families,
-        0 /*log_number*/, this, true /*concurrent_memtable_writes*/,
-        false /*seq_per_batch*/, 0 /*batch_cnt*/, true /*batch_per_txn*/,
+        &trim_history_scheduler_, memtable_tracer_,
+        write_options.ignore_missing_column_families, 0 /*log_number*/, this,
+        true /*concurrent_memtable_writes*/, false /*seq_per_batch*/,
+        0 /*batch_cnt*/, true /*batch_per_txn*/,
         write_options.memtable_insert_hint_per_batch);
     if (write_thread_.CompleteParallelMemTableWriter(&w)) {
       MemTableInsertStatusCheck(w.status);
@@ -847,10 +849,10 @@ Status DBImpl::UnorderedWriteMemtable(const WriteOptions& write_options,
         versions_->GetColumnFamilySet());
     w.status = WriteBatchInternal::InsertInto(
         &w, w.sequence, &column_family_memtables, &flush_scheduler_,
-        &trim_history_scheduler_, write_options.ignore_missing_column_families,
-        0 /*log_number*/, this, true /*concurrent_memtable_writes*/,
-        seq_per_batch_, sub_batch_cnt, true /*batch_per_txn*/,
-        write_options.memtable_insert_hint_per_batch);
+        &trim_history_scheduler_, memtable_tracer_,
+        write_options.ignore_missing_column_families, 0 /*log_number*/, this,
+        true /*concurrent_memtable_writes*/, seq_per_batch_, sub_batch_cnt,
+        true /*batch_per_txn*/, write_options.memtable_insert_hint_per_batch);
     if (write_options.disableWAL) {
       has_unpersisted_data_.store(true, std::memory_order_relaxed);
     }
@@ -1512,7 +1514,7 @@ Status DBImpl::WriteRecoverableState() {
     WriteBatchInternal::SetSequence(&cached_recoverable_state_, seq + 1);
     auto status = WriteBatchInternal::InsertInto(
         &cached_recoverable_state_, column_family_memtables_.get(),
-        &flush_scheduler_, &trim_history_scheduler_, true,
+        &flush_scheduler_, &trim_history_scheduler_, memtable_tracer_, true,
         0 /*recovery_log_number*/, this, false /* concurrent_memtable_writes */,
         &next_seq, &dont_care_bool, seq_per_batch_);
     auto last_seq = next_seq - 1;

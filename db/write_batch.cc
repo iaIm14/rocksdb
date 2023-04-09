@@ -63,6 +63,7 @@
 #include "port/lang.h"
 #include "rocksdb/merge_operator.h"
 #include "rocksdb/system_clock.h"
+#include "trace_replay/memtable_tracer.h"
 #include "util/autovector.h"
 #include "util/cast_util.h"
 #include "util/coding.h"
@@ -1848,6 +1849,9 @@ class MemTableInserter : public WriteBatch::Handler {
                                : Handler::OptionState::kDisabled;
   }
 
+ private:
+  std::shared_ptr<MemtableTracer> memtable_tracer_;
+
  public:
   // cf_mems should not be shared with concurrent inserters
   MemTableInserter(SequenceNumber _sequence, ColumnFamilyMemTables* cf_mems,
@@ -1857,6 +1861,7 @@ class MemTableInserter : public WriteBatch::Handler {
                    uint64_t recovering_log_number, DB* db,
                    bool concurrent_memtable_writes,
                    const WriteBatch::ProtectionInfo* prot_info,
+                   const std::shared_ptr<MemtableTracer>& tracer_,
                    bool* has_valid_writes = nullptr, bool seq_per_batch = false,
                    bool batch_per_txn = true, bool hint_per_batch = false)
       : sequence_(_sequence),
@@ -1886,7 +1891,8 @@ class MemTableInserter : public WriteBatch::Handler {
         duplicate_detector_(),
         dup_dectector_on_(false),
         hint_per_batch_(hint_per_batch),
-        hint_created_(false) {
+        hint_created_(false),
+        memtable_tracer_(tracer_) {
     assert(cf_mems_);
   }
 
@@ -2020,18 +2026,20 @@ class MemTableInserter : public WriteBatch::Handler {
     // any kind of transactions including the ones that use seq_per_batch
     assert(!seq_per_batch_ || !moptions->inplace_update_support);
     if (!moptions->inplace_update_support) {
-      ret_status =
-          mem->Add(sequence_, value_type, key, value, kv_prot_info,
-                   concurrent_memtable_writes_, get_post_process_info(mem),
-                   hint_per_batch_ ? &GetHintMap()[mem] : nullptr);
+      ret_status = mem->Add(sequence_, value_type, key, value, kv_prot_info,
+                            memtable_tracer_, concurrent_memtable_writes_,
+                            get_post_process_info(mem),
+                            hint_per_batch_ ? &GetHintMap()[mem] : nullptr);
     } else if (moptions->inplace_callback == nullptr ||
                value_type != kTypeValue) {
       assert(!concurrent_memtable_writes_);
-      ret_status = mem->Update(sequence_, value_type, key, value, kv_prot_info);
+      ret_status = mem->Update(sequence_, value_type, key, value, kv_prot_info,
+                               memtable_tracer_);
     } else {
       assert(!concurrent_memtable_writes_);
       assert(value_type == kTypeValue);
-      ret_status = mem->UpdateCallback(sequence_, key, value, kv_prot_info);
+      ret_status = mem->UpdateCallback(sequence_, key, value, kv_prot_info,
+                                       memtable_tracer_);
       if (ret_status.IsNotFound()) {
         // key not found in memtable. Do sst get, update, add
         SnapshotImpl read_from_snapshot;
@@ -2081,11 +2089,11 @@ class MemTableInserter : public WriteBatch::Handler {
               // prev_value is updated in-place with final value.
               ret_status = mem->Add(sequence_, value_type, key,
                                     Slice(prev_buffer, prev_size),
-                                    &updated_kv_prot_info);
+                                    &updated_kv_prot_info, memtable_tracer_);
             } else {
-              ret_status = mem->Add(sequence_, value_type, key,
-                                    Slice(prev_buffer, prev_size),
-                                    nullptr /* kv_prot_info */);
+              ret_status = mem->Add(
+                  sequence_, value_type, key, Slice(prev_buffer, prev_size),
+                  nullptr /* kv_prot_info */, memtable_tracer_);
             }
             if (ret_status.ok()) {
               RecordTick(moptions->statistics, NUMBER_KEYS_WRITTEN);
@@ -2095,13 +2103,14 @@ class MemTableInserter : public WriteBatch::Handler {
               ProtectionInfoKVOS64 updated_kv_prot_info(*kv_prot_info);
               updated_kv_prot_info.UpdateV(value, merged_value);
               // merged_value contains the final value.
-              ret_status = mem->Add(sequence_, value_type, key,
-                                    Slice(merged_value), &updated_kv_prot_info);
+              ret_status =
+                  mem->Add(sequence_, value_type, key, Slice(merged_value),
+                           &updated_kv_prot_info, memtable_tracer_);
             } else {
               // merged_value contains the final value.
               ret_status =
                   mem->Add(sequence_, value_type, key, Slice(merged_value),
-                           nullptr /* kv_prot_info */);
+                           nullptr /* kv_prot_info */, memtable_tracer_);
             }
             if (ret_status.ok()) {
               RecordTick(moptions->statistics, NUMBER_KEYS_WRITTEN);
@@ -2184,10 +2193,10 @@ class MemTableInserter : public WriteBatch::Handler {
                     const ProtectionInfoKVOS64* kv_prot_info) {
     Status ret_status;
     MemTable* mem = cf_mems_->GetMemTable();
-    ret_status =
-        mem->Add(sequence_, delete_type, key, value, kv_prot_info,
-                 concurrent_memtable_writes_, get_post_process_info(mem),
-                 hint_per_batch_ ? &GetHintMap()[mem] : nullptr);
+    ret_status = mem->Add(sequence_, delete_type, key, value, kv_prot_info,
+                          memtable_tracer_, concurrent_memtable_writes_,
+                          get_post_process_info(mem),
+                          hint_per_batch_ ? &GetHintMap()[mem] : nullptr);
     if (UNLIKELY(ret_status.IsTryAgain())) {
       assert(seq_per_batch_);
       const bool kBatchBoundary = true;
@@ -2521,10 +2530,10 @@ class MemTableInserter : public WriteBatch::Handler {
             merged_kv_prot_info.UpdateV(value, new_value);
             merged_kv_prot_info.UpdateO(kTypeMerge, kTypeValue);
             ret_status = mem->Add(sequence_, kTypeValue, key, new_value,
-                                  &merged_kv_prot_info);
+                                  &merged_kv_prot_info, memtable_tracer_);
           } else {
             ret_status = mem->Add(sequence_, kTypeValue, key, new_value,
-                                  nullptr /* kv_prot_info */);
+                                  nullptr /* kv_prot_info */, memtable_tracer_);
           }
         }
       }
@@ -2538,11 +2547,13 @@ class MemTableInserter : public WriteBatch::Handler {
             kv_prot_info->StripC(column_family_id).ProtectS(sequence_);
         ret_status =
             mem->Add(sequence_, kTypeMerge, key, value, &mem_kv_prot_info,
-                     concurrent_memtable_writes_, get_post_process_info(mem));
+                     memtable_tracer_, concurrent_memtable_writes_,
+                     get_post_process_info(mem));
       } else {
-        ret_status = mem->Add(
-            sequence_, kTypeMerge, key, value, nullptr /* kv_prot_info */,
-            concurrent_memtable_writes_, get_post_process_info(mem));
+        ret_status =
+            mem->Add(sequence_, kTypeMerge, key, value,
+                     nullptr /* kv_prot_info */, memtable_tracer_,
+                     concurrent_memtable_writes_, get_post_process_info(mem));
       }
     }
 
@@ -2875,12 +2886,13 @@ Status WriteBatchInternal::InsertInto(
     WriteThread::WriteGroup& write_group, SequenceNumber sequence,
     ColumnFamilyMemTables* memtables, FlushScheduler* flush_scheduler,
     TrimHistoryScheduler* trim_history_scheduler,
+    const std::shared_ptr<MemtableTracer>& memtable_tracer_,
     bool ignore_missing_column_families, uint64_t recovery_log_number, DB* db,
     bool concurrent_memtable_writes, bool seq_per_batch, bool batch_per_txn) {
   MemTableInserter inserter(
       sequence, memtables, flush_scheduler, trim_history_scheduler,
       ignore_missing_column_families, recovery_log_number, db,
-      concurrent_memtable_writes, nullptr /* prot_info */,
+      concurrent_memtable_writes, nullptr /* prot_info */, memtable_tracer_,
       nullptr /*has_valid_writes*/, seq_per_batch, batch_per_txn);
   for (auto w : write_group) {
     if (w->CallbackFailed()) {
@@ -2909,6 +2921,7 @@ Status WriteBatchInternal::InsertInto(
     WriteThread::Writer* writer, SequenceNumber sequence,
     ColumnFamilyMemTables* memtables, FlushScheduler* flush_scheduler,
     TrimHistoryScheduler* trim_history_scheduler,
+    const std::shared_ptr<MemtableTracer>& memtable_tracer_,
     bool ignore_missing_column_families, uint64_t log_number, DB* db,
     bool concurrent_memtable_writes, bool seq_per_batch, size_t batch_cnt,
     bool batch_per_txn, bool hint_per_batch) {
@@ -2920,8 +2933,8 @@ Status WriteBatchInternal::InsertInto(
                             trim_history_scheduler,
                             ignore_missing_column_families, log_number, db,
                             concurrent_memtable_writes, nullptr /* prot_info */,
-                            nullptr /*has_valid_writes*/, seq_per_batch,
-                            batch_per_txn, hint_per_batch);
+                            memtable_tracer_, nullptr /*has_valid_writes*/,
+                            seq_per_batch, batch_per_txn, hint_per_batch);
   SetSequence(writer->batch, sequence);
   inserter.set_log_number_ref(writer->log_ref);
   inserter.set_prot_info(writer->batch->prot_info_.get());
@@ -2938,14 +2951,15 @@ Status WriteBatchInternal::InsertInto(
     const WriteBatch* batch, ColumnFamilyMemTables* memtables,
     FlushScheduler* flush_scheduler,
     TrimHistoryScheduler* trim_history_scheduler,
+    const std::shared_ptr<MemtableTracer>& memtable_tracer_,
     bool ignore_missing_column_families, uint64_t log_number, DB* db,
     bool concurrent_memtable_writes, SequenceNumber* next_seq,
     bool* has_valid_writes, bool seq_per_batch, bool batch_per_txn) {
-  MemTableInserter inserter(Sequence(batch), memtables, flush_scheduler,
-                            trim_history_scheduler,
-                            ignore_missing_column_families, log_number, db,
-                            concurrent_memtable_writes, batch->prot_info_.get(),
-                            has_valid_writes, seq_per_batch, batch_per_txn);
+  MemTableInserter inserter(
+      Sequence(batch), memtables, flush_scheduler, trim_history_scheduler,
+      ignore_missing_column_families, log_number, db,
+      concurrent_memtable_writes, batch->prot_info_.get(), memtable_tracer_,
+      has_valid_writes, seq_per_batch, batch_per_txn);
   Status s = batch->Iterate(&inserter);
   if (next_seq != nullptr) {
     *next_seq = inserter.sequence();

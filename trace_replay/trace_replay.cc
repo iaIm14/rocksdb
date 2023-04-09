@@ -560,6 +560,8 @@ bool Tracer::ShouldSkipTrace(const TraceType& trace_type) {
     case kBlockTraceUncompressionDictBlock:
     case kBlockTraceRangeDeletionBlock:
     case kIOTracer:
+    case kMemtableInsertV0:
+    case kMemtableLootupV0:
       filter_mask = kTraceFilterNone;
       break;
     case kTraceMultiGet:

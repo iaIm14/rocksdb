@@ -521,7 +521,7 @@ class MemTableConstructor : public Constructor {
     int seq = 1;
     for (const auto& kv : kv_map) {
       Status s = memtable_->Add(seq, kTypeValue, kv.first, kv.second,
-                                nullptr /* kv_prot_info */);
+                                nullptr /* kv_prot_info */, nullptr);
       if (!s.ok()) {
         return s;
       }
@@ -3975,7 +3975,6 @@ TEST_F(PlainTableTest, Crc32cFileChecksum) {
   EXPECT_STREQ(f.GetFileChecksum().c_str(), checksum.c_str());
 }
 
-
 TEST_F(GeneralTableTest, ApproximateOffsetOfPlain) {
   TableConstructor c(BytewiseComparator(), true /* convert_to_internal_key_ */);
   c.Add("k01", "hello");
@@ -4205,9 +4204,9 @@ TEST_F(MemTableTest, Simple) {
   ASSERT_OK(batch.DeleteRange(std::string("chi"), std::string("xigua")));
   ASSERT_OK(batch.DeleteRange(std::string("begin"), std::string("end")));
   ColumnFamilyMemTablesDefault cf_mems_default(GetMemTable());
-  ASSERT_TRUE(
-      WriteBatchInternal::InsertInto(&batch, &cf_mems_default, nullptr, nullptr)
-          .ok());
+  ASSERT_TRUE(WriteBatchInternal::InsertInto(&batch, &cf_mems_default, nullptr,
+                                             nullptr, nullptr)
+                  .ok());
 
   for (int i = 0; i < 2; ++i) {
     Arena arena;

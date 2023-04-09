@@ -34,11 +34,13 @@
 #include "rocksdb/iterator.h"
 #include "rocksdb/merge_operator.h"
 #include "rocksdb/slice_transform.h"
+#include "rocksdb/trace_record.h"
 #include "rocksdb/types.h"
 #include "rocksdb/write_buffer_manager.h"
 #include "table/internal_iterator.h"
 #include "table/iterator_wrapper.h"
 #include "table/merging_iterator.h"
+#include "trace_replay/memtable_tracer.h"
 #include "util/autovector.h"
 #include "util/coding.h"
 #include "util/mutexlock.h"
@@ -712,6 +714,7 @@ Status MemTable::Add(SequenceNumber s, ValueType type,
                      const Slice& key, /* user key */
                      const Slice& value,
                      const ProtectionInfoKVOS64* kv_prot_info,
+                     const std::shared_ptr<MemtableTracer>& memtable_tracer_,
                      bool allow_concurrent,
                      MemTablePostProcessInfo* post_process_info, void** hint) {
   // Format of an entry is concatenation of:
@@ -757,6 +760,13 @@ Status MemTable::Add(SequenceNumber s, ValueType type,
   size_t ts_sz = GetInternalKeyComparator().user_comparator()->timestamp_size();
   Slice key_without_ts = StripTimestampFromUserKey(key, ts_sz);
 
+  // memtable tracing insert
+  if (memtable_tracer_ != nullptr && memtable_tracer_->is_tracing_enabled()) {
+    MemtableTraceRecord record(clock_->NowNanos(), TraceType::kMemtableInsertV0,
+                               GetID(), s, key, value, key_size, val_size,
+                               type);
+    memtable_tracer_->WriteMemtableOp(record);
+  }
   if (!allow_concurrent) {
     // Extract prefix for insert with hint.
     if (insert_with_hint_prefix_extractor_ != nullptr &&
@@ -1285,8 +1295,9 @@ bool MemTable::Get(const LookupKey& key, std::string* value,
                    Status* s, MergeContext* merge_context,
                    SequenceNumber* max_covering_tombstone_seq,
                    SequenceNumber* seq, const ReadOptions& read_opts,
-                   bool immutable_memtable, ReadCallback* callback,
-                   bool* is_blob_index, bool do_merge) {
+                   bool immutable_memtable,
+                   const std::shared_ptr<MemtableTracer>& memtable_tracer_,
+                   ReadCallback* callback, bool* is_blob_index, bool do_merge) {
   // The sequence number is updated synchronously in version_set.h
   if (IsEmpty()) {
     // Avoiding recording stats for speed.
@@ -1344,7 +1355,7 @@ bool MemTable::Get(const LookupKey& key, std::string* value,
     }
     GetFromTable(key, *max_covering_tombstone_seq, do_merge, callback,
                  is_blob_index, value, columns, timestamp, s, merge_context,
-                 seq, &found_final_value, &merge_in_progress);
+                 seq, &found_final_value, &merge_in_progress, memtable_tracer_);
   }
 
   // No change to value, since we have not yet found a Put/Delete
@@ -1356,14 +1367,13 @@ bool MemTable::Get(const LookupKey& key, std::string* value,
   return found_final_value;
 }
 
-void MemTable::GetFromTable(const LookupKey& key,
-                            SequenceNumber max_covering_tombstone_seq,
-                            bool do_merge, ReadCallback* callback,
-                            bool* is_blob_index, std::string* value,
-                            PinnableWideColumns* columns,
-                            std::string* timestamp, Status* s,
-                            MergeContext* merge_context, SequenceNumber* seq,
-                            bool* found_final_value, bool* merge_in_progress) {
+void MemTable::GetFromTable(
+    const LookupKey& key, SequenceNumber max_covering_tombstone_seq,
+    bool do_merge, ReadCallback* callback, bool* is_blob_index,
+    std::string* value, PinnableWideColumns* columns, std::string* timestamp,
+    Status* s, MergeContext* merge_context, SequenceNumber* seq,
+    bool* found_final_value, bool* merge_in_progress,
+    const std::shared_ptr<MemtableTracer>& memtable_tracer_) {
   Saver saver;
   saver.status = s;
   saver.found_final_value = found_final_value;
@@ -1386,12 +1396,20 @@ void MemTable::GetFromTable(const LookupKey& key,
   saver.do_merge = do_merge;
   saver.allow_data_in_errors = moptions_.allow_data_in_errors;
   saver.protection_bytes_per_key = moptions_.protection_bytes_per_key;
+
   table_->Get(key, &saver, SaveValue);
   *seq = saver.seq;
+  if (memtable_tracer_ != nullptr && memtable_tracer_->is_tracing_enabled()) {
+    MemtableTraceRecord record(clock_->NowNanos(), TraceType::kMemtableLootupV0,
+                               GetID(), *seq, &key, *saver.value);
+    memtable_tracer_->WriteMemtableOp(record);
+  }
 }
 
-void MemTable::MultiGet(const ReadOptions& read_options, MultiGetRange* range,
-                        ReadCallback* callback, bool immutable_memtable) {
+void MemTable::MultiGet(
+    const ReadOptions& read_options, MultiGetRange* range,
+    ReadCallback* callback, bool immutable_memtable,
+    const std::shared_ptr<MemtableTracer>& memtable_tracer_) {
   // The sequence number is updated synchronously in version_set.h
   if (IsEmpty()) {
     // Avoiding recording stats for speed.
@@ -1457,7 +1475,7 @@ void MemTable::MultiGet(const ReadOptions& read_options, MultiGetRange* range,
                  callback, &iter->is_blob_index,
                  iter->value ? iter->value->GetSelf() : nullptr, iter->columns,
                  iter->timestamp, iter->s, &(iter->merge_context), &dummy_seq,
-                 &found_final_value, &merge_in_progress);
+                 &found_final_value, &merge_in_progress, memtable_tracer_);
 
     if (!found_final_value && merge_in_progress) {
       *(iter->s) = Status::MergeInProgress();
@@ -1488,9 +1506,10 @@ void MemTable::MultiGet(const ReadOptions& read_options, MultiGetRange* range,
   PERF_COUNTER_ADD(get_from_memtable_count, 1);
 }
 
-Status MemTable::Update(SequenceNumber seq, ValueType value_type,
-                        const Slice& key, const Slice& value,
-                        const ProtectionInfoKVOS64* kv_prot_info) {
+Status MemTable::Update(
+    SequenceNumber seq, ValueType value_type, const Slice& key,
+    const Slice& value, const ProtectionInfoKVOS64* kv_prot_info,
+    const std::shared_ptr<MemtableTracer>& memtable_tracer_) {
   LookupKey lkey(key, seq);
   Slice mem_key = lkey.memtable_key();
 
@@ -1548,12 +1567,13 @@ Status MemTable::Update(SequenceNumber seq, ValueType value_type,
   }
 
   // The latest value is not value_type or key doesn't exist
-  return Add(seq, value_type, key, value, kv_prot_info);
+  return Add(seq, value_type, key, value, kv_prot_info, memtable_tracer_);
 }
 
-Status MemTable::UpdateCallback(SequenceNumber seq, const Slice& key,
-                                const Slice& delta,
-                                const ProtectionInfoKVOS64* kv_prot_info) {
+Status MemTable::UpdateCallback(
+    SequenceNumber seq, const Slice& key, const Slice& delta,
+    const ProtectionInfoKVOS64* kv_prot_info,
+    const std::shared_ptr<MemtableTracer>& memtable_tracer_) {
   LookupKey lkey(key, seq);
   Slice memkey = lkey.memtable_key();
 
@@ -1623,10 +1643,10 @@ Status MemTable::UpdateCallback(SequenceNumber seq, const Slice& key,
             ProtectionInfoKVOS64 updated_kv_prot_info(*kv_prot_info);
             updated_kv_prot_info.UpdateV(delta, str_value);
             s = Add(seq, kTypeValue, key, Slice(str_value),
-                    &updated_kv_prot_info);
+                    &updated_kv_prot_info, memtable_tracer_);
           } else {
             s = Add(seq, kTypeValue, key, Slice(str_value),
-                    nullptr /* kv_prot_info */);
+                    nullptr /* kv_prot_info */, memtable_tracer_);
           }
           RecordTick(moptions_.statistics, NUMBER_KEYS_WRITTEN);
           UpdateFlushState();
@@ -1682,6 +1702,7 @@ size_t MemTable::CountSuccessiveMergeEntries(const LookupKey& key) {
 void MemTableRep::Get(const LookupKey& k, void* callback_args,
                       bool (*callback_func)(void* arg, const char* entry)) {
   auto iter = GetDynamicPrefixIterator();
+  // get
   for (iter->Seek(k.internal_key(), k.memtable_key().data());
        iter->Valid() && callback_func(callback_args, iter->key());
        iter->Next()) {

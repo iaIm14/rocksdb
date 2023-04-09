@@ -9,6 +9,12 @@
 #include "db/db_impl/db_impl.h"
 
 #include <stdint.h>
+
+#include <memory>
+
+#include "rocksdb/options.h"
+#include "rocksdb/trace_reader_writer.h"
+#include "trace_replay/memtable_tracer.h"
 #ifdef OS_SOLARIS
 #include <alloca.h>
 #endif
@@ -162,6 +168,7 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
                                           &init_logger_creation_s_)),
       env_(initial_db_options_.env),
       io_tracer_(std::make_shared<IOTracer>()),
+      memtable_tracer_(std::make_shared<MemtableTracer>()),
       immutable_db_options_(initial_db_options_),
       fs_(immutable_db_options_.fs, io_tracer_),
       mutable_db_options_(initial_db_options_),
@@ -273,10 +280,10 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
       PeriodicTaskType::kRecordSeqnoTime,
       [this]() { this->RecordSeqnoToTimeMapping(); });
 
-  versions_.reset(new VersionSet(dbname_, &immutable_db_options_, file_options_,
-                                 table_cache_.get(), write_buffer_manager_,
-                                 &write_controller_, &block_cache_tracer_,
-                                 io_tracer_, db_id_, db_session_id_));
+  versions_.reset(new VersionSet(
+      dbname_, &immutable_db_options_, file_options_, table_cache_.get(),
+      write_buffer_manager_, &write_controller_, &block_cache_tracer_,
+      io_tracer_, memtable_tracer_, db_id_, db_session_id_));
   column_family_memtables_.reset(
       new ColumnFamilyMemTablesImpl(versions_->GetColumnFamilySet()));
 
@@ -2110,8 +2117,8 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
                                      : nullptr,
               get_impl_options.columns, timestamp, &s, &merge_context,
               &max_covering_tombstone_seq, read_options,
-              false /* immutable_memtable */, get_impl_options.callback,
-              get_impl_options.is_blob_index)) {
+              false /* immutable_memtable */, memtable_tracer_,
+              get_impl_options.callback, get_impl_options.is_blob_index)) {
         done = true;
 
         if (get_impl_options.value) {
@@ -2142,8 +2149,8 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
       if (sv->mem->Get(lkey, /*value=*/nullptr, /*columns=*/nullptr,
                        /*timestamp=*/nullptr, &s, &merge_context,
                        &max_covering_tombstone_seq, read_options,
-                       false /* immutable_memtable */, nullptr, nullptr,
-                       false)) {
+                       false /* immutable_memtable */, memtable_tracer_,
+                       nullptr, nullptr, false)) {
         done = true;
         RecordTick(stats_, MEMTABLE_HIT);
       } else if ((s.ok() || s.IsMergeInProgress()) &&
@@ -2396,10 +2403,11 @@ std::vector<Status> DBImpl::MultiGet(
          has_unpersisted_data_.load(std::memory_order_relaxed));
     bool done = false;
     if (!skip_memtable) {
-      if (super_version->mem->Get(
-              lkey, value, /*columns=*/nullptr, timestamp, &s, &merge_context,
-              &max_covering_tombstone_seq, read_options,
-              false /* immutable_memtable */, read_callback)) {
+      if (super_version->mem->Get(lkey, value, /*columns=*/nullptr, timestamp,
+                                  &s, &merge_context,
+                                  &max_covering_tombstone_seq, read_options,
+                                  false /* immutable_memtable */,
+                                  memtable_tracer_, read_callback)) {
         done = true;
         RecordTick(stats_, MEMTABLE_HIT);
       } else if (super_version->imm->Get(lkey, value, /*columns=*/nullptr,
@@ -2981,7 +2989,8 @@ Status DBImpl::MultiGetImpl(
          has_unpersisted_data_.load(std::memory_order_relaxed));
     if (!skip_memtable) {
       super_version->mem->MultiGet(read_options, &range, callback,
-                                   false /* immutable_memtable */);
+                                   false /* immutable_memtable */,
+                                   memtable_tracer_);
       if (!range.empty()) {
         super_version->imm->MultiGet(read_options, &range, callback);
       }
@@ -3867,6 +3876,17 @@ Status DBImpl::StartIOTrace(const TraceOptions& trace_options,
 Status DBImpl::EndIOTrace() {
   io_tracer_->EndIOTrace();
   return Status::OK();
+}
+
+Status DBImpl::StartMemtableTrace(const TraceOptions& options,
+                                  std::unique_ptr<TraceWriter>&& trace_writer) {
+  assert(trace_writer != nullptr);
+  return memtable_tracer_->StartMemtableTrace(GetSystemClock(), options,
+                                              std::move(trace_writer));
+}
+
+Status DBImpl::EndMemtableTrace() {
+  return memtable_tracer_->EndMemtableTrace();
 }
 
 Options DBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
@@ -5055,8 +5075,8 @@ Status DBImpl::GetLatestSequenceForKey(
   // Check if there is a record for this key in the latest memtable
   sv->mem->Get(lkey, /*value=*/nullptr, /*columns=*/nullptr, timestamp, &s,
                &merge_context, &max_covering_tombstone_seq, seq, read_options,
-               false /* immutable_memtable */, nullptr /*read_callback*/,
-               is_blob_index);
+               false /* immutable_memtable */, memtable_tracer_,
+               nullptr /*read_callback*/, is_blob_index);
 
   if (!(s.ok() || s.IsNotFound() || s.IsMergeInProgress())) {
     // unexpected error reading memtable.

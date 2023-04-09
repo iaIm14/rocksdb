@@ -43,6 +43,7 @@
 #include "table/table_builder.h"
 #include "table/two_level_iterator.h"
 #include "test_util/sync_point.h"
+#include "trace_replay/memtable_tracer.h"
 #include "util/coding.h"
 #include "util/mutexlock.h"
 #include "util/stop_watch.h"
@@ -96,6 +97,7 @@ FlushJob::FlushJob(
     Statistics* stats, EventLogger* event_logger, bool measure_io_stats,
     const bool sync_output_directory, const bool write_manifest,
     Env::Priority thread_pri, const std::shared_ptr<IOTracer>& io_tracer,
+    const std::shared_ptr<MemtableTracer>& memtable_tracer,
     const SeqnoToTimeMapping& seqno_time_mapping, const std::string& db_id,
     const std::string& db_session_id, std::string full_history_ts_low,
     BlobFileCompletionCallback* blob_callback)
@@ -129,6 +131,7 @@ FlushJob::FlushJob(
       pick_memtable_called(false),
       thread_pri_(thread_pri),
       io_tracer_(io_tracer),
+      memtable_tracer_(memtable_tracer),
       clock_(db_options_.clock),
       full_history_ts_low_(std::move(full_history_ts_low)),
       blob_callback_(blob_callback),
@@ -502,9 +505,10 @@ Status FlushJob::MemPurge() {
       // to still be an "experimental" feature.
       s = new_mem->Add(
           ikey.sequence, ikey.type, ikey.user_key, value,
-          nullptr,   // KV protection info set as nullptr since it
-                     // should only be useful for the first add to
-                     // the original memtable.
+          nullptr,  // KV protection info set as nullptr since it
+                    // should only be useful for the first add to
+                    // the original memtable.
+          memtable_tracer_,
           false,     // : allow concurrent_memtable_writes_
                      // Not seen as necessary for now.
           nullptr,   // get_post_process_info(m) must be nullptr
@@ -549,10 +553,11 @@ Status FlushJob::MemPurge() {
             nullptr,               // KV protection info set as nullptr since it
                                    // should only be useful for the first add to
                                    // the original memtable.
-            false,                 // : allow concurrent_memtable_writes_
-                                   // Not seen as necessary for now.
-            nullptr,               // get_post_process_info(m) must be nullptr
-                      // when concurrent_memtable_writes is switched off.
+            memtable_tracer_,
+            false,     // : allow concurrent_memtable_writes_
+                       // Not seen as necessary for now.
+            nullptr,   // get_post_process_info(m) must be nullptr
+                       // when concurrent_memtable_writes is switched off.
             nullptr);  // hint, only used when concurrent_memtable_writes_
                        // is switched on.
 
@@ -730,9 +735,10 @@ bool FlushJob::MemPurgeDecider(double threshold) {
           min_seqno_snapshot < kMaxSequenceNumber ? &min_snapshot : nullptr;
 
       // Estimate if the sample entry is valid or not.
-      get_res = mt->Get(lkey, &vget, /*columns=*/nullptr, /*timestamp=*/nullptr,
-                        &mget_s, &merge_context, &max_covering_tombstone_seq,
-                        &sqno, ro, true /* immutable_memtable */);
+      get_res =
+          mt->Get(lkey, &vget, /*columns=*/nullptr, /*timestamp=*/nullptr,
+                  &mget_s, &merge_context, &max_covering_tombstone_seq, &sqno,
+                  ro, true /* immutable_memtable */, memtable_tracer_);
       if (!get_res) {
         ROCKS_LOG_WARN(
             db_options_.info_log,
@@ -774,7 +780,8 @@ bool FlushJob::MemPurgeDecider(double threshold) {
           if ((*next_mem_iter)
                   ->Get(lkey, &vget, /*columns=*/nullptr, /*timestamp=*/nullptr,
                         &mget_s, &merge_context, &max_covering_tombstone_seq,
-                        &sqno, ro, true /* immutable_memtable */)) {
+                        &sqno, ro, true /* immutable_memtable */,
+                        memtable_tracer_)) {
             not_in_next_mems = false;
             break;
           }

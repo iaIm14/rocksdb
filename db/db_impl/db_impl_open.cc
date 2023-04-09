@@ -1246,7 +1246,7 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& wal_numbers,
       bool has_valid_writes = false;
       status = WriteBatchInternal::InsertInto(
           &batch, column_family_memtables_.get(), &flush_scheduler_,
-          &trim_history_scheduler_, true, wal_number, this,
+          &trim_history_scheduler_, memtable_tracer_, true, wal_number, this,
           false /* concurrent_memtable_writes */, next_sequence,
           &has_valid_writes, seq_per_batch_, batch_per_txn_);
       MaybeIgnoreError(&status);
@@ -2145,7 +2145,6 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
     sfm->ReserveDiskBuffer(max_write_buffer_size,
                            impl->immutable_db_options_.db_paths[0].path);
   }
-
 
   if (s.ok()) {
     ROCKS_LOG_HEADER(impl->immutable_db_options_.info_log, "DB pointer %p",

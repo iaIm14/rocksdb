@@ -273,8 +273,9 @@ Status DBImplSecondary::RecoverLogFiles(
         status = WriteBatchInternal::InsertInto(
             &batch, column_family_memtables_.get(),
             nullptr /* flush_scheduler */, nullptr /* trim_history_scheduler*/,
-            true, log_number, this, false /* concurrent_memtable_writes */,
-            next_sequence, &has_valid_writes, seq_per_batch_, batch_per_txn_);
+            memtable_tracer_, true, log_number, this,
+            false /* concurrent_memtable_writes */, next_sequence,
+            &has_valid_writes, seq_per_batch_, batch_per_txn_);
       }
       // If column family was not found, it might mean that the WAL write
       // batch references to the column family that was dropped after the
@@ -395,7 +396,8 @@ Status DBImplSecondary::GetImpl(const ReadOptions& read_options,
   if (super_version->mem->Get(lkey, pinnable_val->GetSelf(),
                               /*columns=*/nullptr, ts, &s, &merge_context,
                               &max_covering_tombstone_seq, read_options,
-                              false /* immutable_memtable */, &read_cb)) {
+                              false /* immutable_memtable */, memtable_tracer_,
+                              &read_cb)) {
     done = true;
     pinnable_val->PinSelf();
     RecordTick(stats_, MEMTABLE_HIT);
@@ -724,7 +726,7 @@ Status DB::OpenAsSecondary(
   impl->versions_.reset(new ReactiveVersionSet(
       dbname, &impl->immutable_db_options_, impl->file_options_,
       impl->table_cache_.get(), impl->write_buffer_manager_,
-      &impl->write_controller_, impl->io_tracer_));
+      &impl->write_controller_, impl->io_tracer_, impl->memtable_tracer_));
   impl->column_family_memtables_.reset(
       new ColumnFamilyMemTablesImpl(impl->versions_->GetColumnFamilySet()));
   impl->wal_in_db_path_ = impl->immutable_db_options_.IsWalDirSameAsDBPath();
@@ -944,6 +946,5 @@ Status DB::OpenAndCompact(
   return OpenAndCompact(OpenAndCompactOptions(), name, output_directory, input,
                         output, override_options);
 }
-
 
 }  // namespace ROCKSDB_NAMESPACE

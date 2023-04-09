@@ -22,6 +22,7 @@
 #include "rocksdb/iterator.h"
 #include "rocksdb/options.h"
 #include "rocksdb/types.h"
+#include "trace_replay/memtable_tracer.h"
 #include "util/autovector.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -42,11 +43,14 @@ struct FlushJobInfo;
 // (such as holding the db mutex or being on the write thread).
 class MemTableListVersion {
  public:
-  explicit MemTableListVersion(size_t* parent_memtable_list_memory_usage,
-                               const MemTableListVersion& old);
-  explicit MemTableListVersion(size_t* parent_memtable_list_memory_usage,
-                               int max_write_buffer_number_to_maintain,
-                               int64_t max_write_buffer_size_to_maintain);
+  explicit MemTableListVersion(
+      size_t* parent_memtable_list_memory_usage, const MemTableListVersion& old,
+      const std::shared_ptr<MemtableTracer>& memtable_tracer);
+  explicit MemTableListVersion(
+      size_t* parent_memtable_list_memory_usage,
+      int max_write_buffer_number_to_maintain,
+      int64_t max_write_buffer_size_to_maintain,
+      const std::shared_ptr<MemtableTracer>& memtable_tracer);
 
   void Ref();
   void Unref(autovector<MemTable*>* to_delete = nullptr);
@@ -201,6 +205,7 @@ class MemTableListVersion {
   int refs_ = 0;
 
   size_t* parent_memtable_list_memory_usage_;
+  std::shared_ptr<MemtableTracer> memtable_tracer_;
 };
 
 // This class stores references to all the immutable memtables.
@@ -219,19 +224,21 @@ class MemTableList {
   // A list of memtables.
   explicit MemTableList(int min_write_buffer_number_to_merge,
                         int max_write_buffer_number_to_maintain,
-                        int64_t max_write_buffer_size_to_maintain)
+                        int64_t max_write_buffer_size_to_maintain,
+                        const std::shared_ptr<MemtableTracer>& memtable_tracer)
       : imm_flush_needed(false),
         imm_trim_needed(false),
         min_write_buffer_number_to_merge_(min_write_buffer_number_to_merge),
-        current_(new MemTableListVersion(&current_memory_usage_,
-                                         max_write_buffer_number_to_maintain,
-                                         max_write_buffer_size_to_maintain)),
+        current_(new MemTableListVersion(
+            &current_memory_usage_, max_write_buffer_number_to_maintain,
+            max_write_buffer_size_to_maintain, memtable_tracer_)),
         num_flush_not_started_(0),
         commit_in_progress_(false),
         flush_requested_(false),
         current_memory_usage_(0),
         current_memory_allocted_bytes_excluding_last_(0),
-        current_has_history_(false) {
+        current_has_history_(false),
+        memtable_tracer_(memtable_tracer) {
     current_->Ref();
   }
 
@@ -449,6 +456,9 @@ class MemTableList {
 
   // Cached value of current_->HasHistory().
   std::atomic<bool> current_has_history_;
+
+  // memtable_tracer_
+  std::shared_ptr<MemtableTracer> memtable_tracer_;
 };
 
 // Installs memtable atomic flush results.

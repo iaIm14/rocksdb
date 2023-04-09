@@ -1850,6 +1850,16 @@ class DB {
     return Status::NotSupported("EndBlockCacheTrace() is not implemented.");
   }
 
+  virtual Status StartMemtableTrace(
+      const TraceOptions& /*options*/,
+      std::unique_ptr<TraceWriter>&& /*trace_writer*/) {
+    return Status::NotSupported("StartMemtableTrace() is not implemented.");
+  }
+
+  virtual Status EndMemtableTrace() {
+    return Status::NotSupported("EndMemtableTrace() is not implemented.");
+  }
+
   // Create a default trace replayer.
   virtual Status NewDefaultReplayer(
       const std::vector<ColumnFamilyHandle*>& /*handles*/,

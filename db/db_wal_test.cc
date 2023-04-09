@@ -1297,7 +1297,8 @@ class RecoveryTestHelper {
         test->dbname_, &db_options, file_options, table_cache.get(),
         &write_buffer_manager, &write_controller,
         /*block_cache_tracer=*/nullptr,
-        /*io_tracer=*/nullptr, /*db_id*/ "", /*db_session_id*/ ""));
+        /*io_tracer=*/nullptr, /*memtable_tracer*/ nullptr, /*db_id*/ "",
+        /*db_session_id*/ ""));
 
     wal_manager.reset(
         new WalManager(db_options, file_options, /*io_tracer=*/nullptr));
@@ -1670,7 +1671,6 @@ TEST_F(DBWALTest, FixSyncWalOnObseletedWalWithNewManifestCausingMissingWAL) {
         ASSERT_TRUE(new_manifest_created);
         wal_synced = true;
       });
-
 
   SyncPoint::GetInstance()->EnableProcessing();
 
@@ -2339,7 +2339,6 @@ TEST_F(DBWALTest, WalInManifestButNotInSortedWals) {
   wals_go_missing = false;
   Close();
 }
-
 
 TEST_F(DBWALTest, WalTermTest) {
   Options options = CurrentOptions();

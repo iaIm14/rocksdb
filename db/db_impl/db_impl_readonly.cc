@@ -16,7 +16,6 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-
 DBImplReadOnly::DBImplReadOnly(const DBOptions& db_options,
                                const std::string& dbname)
     : DBImpl(db_options, dbname, /*seq_per_batch*/ false,
@@ -87,7 +86,8 @@ Status DBImplReadOnly::Get(const ReadOptions& read_options,
   if (super_version->mem->Get(lkey, pinnable_val->GetSelf(),
                               /*columns=*/nullptr, ts, &s, &merge_context,
                               &max_covering_tombstone_seq, read_options,
-                              false /* immutable_memtable */, &read_cb)) {
+                              false /* immutable_memtable */, memtable_tracer_,
+                              &read_cb)) {
     pinnable_val->PinSelf();
     RecordTick(stats_, MEMTABLE_HIT);
   } else {
@@ -319,6 +319,5 @@ Status DBImplReadOnly::OpenForReadOnlyWithoutCheck(
   }
   return s;
 }
-
 
 }  // namespace ROCKSDB_NAMESPACE

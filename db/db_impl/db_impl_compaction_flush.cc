@@ -214,7 +214,7 @@ Status DBImpl::FlushMemTableToOutputFile(
       GetCompressionFlush(*cfd->ioptions(), mutable_cf_options), stats_,
       &event_logger_, mutable_cf_options.report_bg_io_stats,
       true /* sync_output_directory */, true /* write_manifest */, thread_pri,
-      io_tracer_, seqno_time_mapping_, db_id_, db_session_id_,
+      io_tracer_, memtable_tracer_, seqno_time_mapping_, db_id_, db_session_id_,
       cfd->GetFullHistoryTsLow(), &blob_callback_);
   FileMetaData file_meta;
 
@@ -464,8 +464,8 @@ Status DBImpl::AtomicFlushMemTablesToOutputFiles(
         GetCompressionFlush(*cfd->ioptions(), mutable_cf_options), stats_,
         &event_logger_, mutable_cf_options.report_bg_io_stats,
         false /* sync_output_directory */, false /* write_manifest */,
-        thread_pri, io_tracer_, seqno_time_mapping_, db_id_, db_session_id_,
-        cfd->GetFullHistoryTsLow(), &blob_callback_));
+        thread_pri, io_tracer_, memtable_tracer_, seqno_time_mapping_, db_id_,
+        db_session_id_, cfd->GetFullHistoryTsLow(), &blob_callback_));
   }
 
   std::vector<FileMetaData> file_meta(num_cfs);
@@ -848,8 +848,8 @@ void DBImpl::NotifyOnFlushBegin(ColumnFamilyData* cfd, FileMetaData* file_meta,
     }
   }
   mutex_.Lock();
-// no need to signal bg_cv_ as it will be signaled at the end of the
-// flush process.
+  // no need to signal bg_cv_ as it will be signaled at the end of the
+  // flush process.
 }
 
 void DBImpl::NotifyOnFlushCompleted(

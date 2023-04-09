@@ -13,6 +13,7 @@
 
 #include "db/flush_scheduler.h"
 #include "db/kv_checksum.h"
+#include "db/memtable.h"
 #include "db/trim_history_scheduler.h"
 #include "db/write_thread.h"
 #include "rocksdb/db.h"
@@ -178,6 +179,7 @@ class WriteBatchInternal {
       WriteThread::WriteGroup& write_group, SequenceNumber sequence,
       ColumnFamilyMemTables* memtables, FlushScheduler* flush_scheduler,
       TrimHistoryScheduler* trim_history_scheduler,
+      const std::shared_ptr<MemtableTracer>& memtable_tracer_,
       bool ignore_missing_column_families = false, uint64_t log_number = 0,
       DB* db = nullptr, bool concurrent_memtable_writes = false,
       bool seq_per_batch = false, bool batch_per_txn = true);
@@ -188,21 +190,21 @@ class WriteBatchInternal {
       const WriteBatch* batch, ColumnFamilyMemTables* memtables,
       FlushScheduler* flush_scheduler,
       TrimHistoryScheduler* trim_history_scheduler,
+      const std::shared_ptr<MemtableTracer>& memtable_tracer_,
       bool ignore_missing_column_families = false, uint64_t log_number = 0,
       DB* db = nullptr, bool concurrent_memtable_writes = false,
       SequenceNumber* next_seq = nullptr, bool* has_valid_writes = nullptr,
       bool seq_per_batch = false, bool batch_per_txn = true);
 
-  static Status InsertInto(WriteThread::Writer* writer, SequenceNumber sequence,
-                           ColumnFamilyMemTables* memtables,
-                           FlushScheduler* flush_scheduler,
-                           TrimHistoryScheduler* trim_history_scheduler,
-                           bool ignore_missing_column_families = false,
-                           uint64_t log_number = 0, DB* db = nullptr,
-                           bool concurrent_memtable_writes = false,
-                           bool seq_per_batch = false, size_t batch_cnt = 0,
-                           bool batch_per_txn = true,
-                           bool hint_per_batch = false);
+  static Status InsertInto(
+      WriteThread::Writer* writer, SequenceNumber sequence,
+      ColumnFamilyMemTables* memtables, FlushScheduler* flush_scheduler,
+      TrimHistoryScheduler* trim_history_scheduler,
+      const std::shared_ptr<MemtableTracer>& memtable_tracer_,
+      bool ignore_missing_column_families = false, uint64_t log_number = 0,
+      DB* db = nullptr, bool concurrent_memtable_writes = false,
+      bool seq_per_batch = false, size_t batch_cnt = 0,
+      bool batch_per_txn = true, bool hint_per_batch = false);
 
   // Appends src write batch to dst write batch and updates count in dst
   // write batch. Returns OK if the append is successful. Checks number of

@@ -46,12 +46,14 @@ void MemTableListVersion::UnrefMemTable(autovector<MemTable*>* to_delete,
 }
 
 MemTableListVersion::MemTableListVersion(
-    size_t* parent_memtable_list_memory_usage, const MemTableListVersion& old)
+    size_t* parent_memtable_list_memory_usage, const MemTableListVersion& old,
+    const std::shared_ptr<MemtableTracer>& memtable_tracer)
     : max_write_buffer_number_to_maintain_(
           old.max_write_buffer_number_to_maintain_),
       max_write_buffer_size_to_maintain_(
           old.max_write_buffer_size_to_maintain_),
-      parent_memtable_list_memory_usage_(parent_memtable_list_memory_usage) {
+      parent_memtable_list_memory_usage_(parent_memtable_list_memory_usage),
+      memtable_tracer_(memtable_tracer) {
   memlist_ = old.memlist_;
   for (auto& m : memlist_) {
     m->Ref();
@@ -66,10 +68,12 @@ MemTableListVersion::MemTableListVersion(
 MemTableListVersion::MemTableListVersion(
     size_t* parent_memtable_list_memory_usage,
     int max_write_buffer_number_to_maintain,
-    int64_t max_write_buffer_size_to_maintain)
+    int64_t max_write_buffer_size_to_maintain,
+    const std::shared_ptr<MemtableTracer>& memtable_tracer)
     : max_write_buffer_number_to_maintain_(max_write_buffer_number_to_maintain),
       max_write_buffer_size_to_maintain_(max_write_buffer_size_to_maintain),
-      parent_memtable_list_memory_usage_(parent_memtable_list_memory_usage) {}
+      parent_memtable_list_memory_usage_(parent_memtable_list_memory_usage),
+      memtable_tracer_(memtable_tracer) {}
 
 void MemTableListVersion::Ref() { ++refs_; }
 
@@ -121,7 +125,7 @@ void MemTableListVersion::MultiGet(const ReadOptions& read_options,
                                    ReadCallback* callback) {
   for (auto memtable : memlist_) {
     memtable->MultiGet(read_options, range, callback,
-                       true /* immutable_memtable */);
+                       true /* immutable_memtable */, memtable_tracer_);
     if (range->empty()) {
       return;
     }
@@ -132,10 +136,11 @@ bool MemTableListVersion::GetMergeOperands(
     const LookupKey& key, Status* s, MergeContext* merge_context,
     SequenceNumber* max_covering_tombstone_seq, const ReadOptions& read_opts) {
   for (MemTable* memtable : memlist_) {
-    bool done = memtable->Get(
-        key, /*value=*/nullptr, /*columns=*/nullptr, /*timestamp=*/nullptr, s,
-        merge_context, max_covering_tombstone_seq, read_opts,
-        true /* immutable_memtable */, nullptr, nullptr, false);
+    bool done = memtable->Get(key, /*value=*/nullptr, /*columns=*/nullptr,
+                              /*timestamp=*/nullptr, s, merge_context,
+                              max_covering_tombstone_seq, read_opts,
+                              true /* immutable_memtable */, memtable_tracer_,
+                              nullptr, nullptr, false);
     if (done) {
       return true;
     }
@@ -165,10 +170,10 @@ bool MemTableListVersion::GetFromList(
     assert(memtable->IsFragmentedRangeTombstonesConstructed());
     SequenceNumber current_seq = kMaxSequenceNumber;
 
-    bool done =
-        memtable->Get(key, value, columns, timestamp, s, merge_context,
-                      max_covering_tombstone_seq, &current_seq, read_opts,
-                      true /* immutable_memtable */, callback, is_blob_index);
+    bool done = memtable->Get(key, value, columns, timestamp, s, merge_context,
+                              max_covering_tombstone_seq, &current_seq,
+                              read_opts, true /* immutable_memtable */,
+                              memtable_tracer_, callback, is_blob_index);
     if (*seq == kMaxSequenceNumber) {
       // Store the most recent sequence number of any operation on this key.
       // Since we only care about the most recent change, we only need to
@@ -676,7 +681,8 @@ void MemTableList::InstallNewVersion() {
   } else {
     // somebody else holds the current version, we need to create new one
     MemTableListVersion* version = current_;
-    current_ = new MemTableListVersion(&current_memory_usage_, *version);
+    current_ = new MemTableListVersion(&current_memory_usage_, *version,
+                                       memtable_tracer_);
     current_->Ref();
     version->Unref();
   }

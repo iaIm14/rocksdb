@@ -1157,10 +1157,11 @@ class VersionSetTestBase {
         new VersionSet(dbname_, &db_options_, env_options_, table_cache_.get(),
                        &write_buffer_manager_, &write_controller_,
                        /*block_cache_tracer=*/nullptr, /*io_tracer=*/nullptr,
+                       /*memtable_tracer*/ nullptr,
                        /*db_id*/ "", /*db_session_id*/ ""));
     reactive_versions_ = std::make_shared<ReactiveVersionSet>(
         dbname_, &db_options_, env_options_, table_cache_.get(),
-        &write_buffer_manager_, &write_controller_, nullptr);
+        &write_buffer_manager_, &write_controller_, nullptr, nullptr);
     db_options_.db_paths.emplace_back(dbname_,
                                       std::numeric_limits<uint64_t>::max());
   }
@@ -1261,6 +1262,7 @@ class VersionSetTestBase {
         new VersionSet(dbname_, &db_options_, env_options_, table_cache_.get(),
                        &write_buffer_manager_, &write_controller_,
                        /*block_cache_tracer=*/nullptr, /*io_tracer=*/nullptr,
+                       /*memtable_tracer*/ nullptr,
                        /*db_id*/ "", /*db_session_id*/ ""));
     EXPECT_OK(versions_->Recover(column_families_, false));
   }
@@ -1767,6 +1769,7 @@ TEST_F(VersionSetTest, WalAddition) {
         new VersionSet(dbname_, &db_options_, env_options_, table_cache_.get(),
                        &write_buffer_manager_, &write_controller_,
                        /*block_cache_tracer=*/nullptr, /*io_tracer=*/nullptr,
+                       /*memtable_tracer*/ nullptr,
                        /*db_id*/ "", /*db_session_id*/ ""));
     ASSERT_OK(new_versions->Recover(column_families_, /*read_only=*/false));
     const auto& wals = new_versions->GetWalSet().GetWals();
@@ -1834,6 +1837,7 @@ TEST_F(VersionSetTest, WalCloseWithoutSync) {
         new VersionSet(dbname_, &db_options_, env_options_, table_cache_.get(),
                        &write_buffer_manager_, &write_controller_,
                        /*block_cache_tracer=*/nullptr, /*io_tracer=*/nullptr,
+                       /*memtable_tracer*/ nullptr,
                        /*db_id*/ "", /*db_session_id*/ ""));
     ASSERT_OK(new_versions->Recover(column_families_, false));
     const auto& wals = new_versions->GetWalSet().GetWals();
@@ -1887,6 +1891,7 @@ TEST_F(VersionSetTest, WalDeletion) {
         new VersionSet(dbname_, &db_options_, env_options_, table_cache_.get(),
                        &write_buffer_manager_, &write_controller_,
                        /*block_cache_tracer=*/nullptr, /*io_tracer=*/nullptr,
+                       /*memtable_tracer*/ nullptr,
                        /*db_id*/ "", /*db_session_id*/ ""));
     ASSERT_OK(new_versions->Recover(column_families_, false));
     const auto& wals = new_versions->GetWalSet().GetWals();
@@ -1925,6 +1930,7 @@ TEST_F(VersionSetTest, WalDeletion) {
         new VersionSet(dbname_, &db_options_, env_options_, table_cache_.get(),
                        &write_buffer_manager_, &write_controller_,
                        /*block_cache_tracer=*/nullptr, /*io_tracer=*/nullptr,
+                       /*memtable_tracer*/ nullptr,
                        /*db_id*/ "", /*db_session_id*/ ""));
     ASSERT_OK(new_versions->Recover(column_families_, false));
     const auto& wals = new_versions->GetWalSet().GetWals();
@@ -2045,6 +2051,7 @@ TEST_F(VersionSetTest, DeleteWalsBeforeNonExistingWalNumber) {
         new VersionSet(dbname_, &db_options_, env_options_, table_cache_.get(),
                        &write_buffer_manager_, &write_controller_,
                        /*block_cache_tracer=*/nullptr, /*io_tracer=*/nullptr,
+                       /*memtable_tracer*/ nullptr,
                        /*db_id*/ "", /*db_session_id*/ ""));
     ASSERT_OK(new_versions->Recover(column_families_, false));
     const auto& wals = new_versions->GetWalSet().GetWals();
@@ -2081,6 +2088,7 @@ TEST_F(VersionSetTest, DeleteAllWals) {
         new VersionSet(dbname_, &db_options_, env_options_, table_cache_.get(),
                        &write_buffer_manager_, &write_controller_,
                        /*block_cache_tracer=*/nullptr, /*io_tracer=*/nullptr,
+                       /*memtable_tracer*/ nullptr,
                        /*db_id*/ "", /*db_session_id*/ ""));
     ASSERT_OK(new_versions->Recover(column_families_, false));
     const auto& wals = new_versions->GetWalSet().GetWals();
@@ -2123,6 +2131,7 @@ TEST_F(VersionSetTest, AtomicGroupWithWalEdits) {
         new VersionSet(dbname_, &db_options_, env_options_, table_cache_.get(),
                        &write_buffer_manager_, &write_controller_,
                        /*block_cache_tracer=*/nullptr, /*io_tracer=*/nullptr,
+                       /*memtable_tracer*/ nullptr,
                        /*db_id*/ "", /*db_session_id*/ ""));
     std::string db_id;
     ASSERT_OK(
@@ -2188,6 +2197,7 @@ class VersionSetWithTimestampTest : public VersionSetTest {
         new VersionSet(dbname_, &db_options_, env_options_, table_cache_.get(),
                        &write_buffer_manager_, &write_controller_,
                        /*block_cache_tracer=*/nullptr, /*io_tracer=*/nullptr,
+                       /*memtable_tracer*/ nullptr,
                        /*db_id*/ "", /*db_session_id*/ ""));
     ASSERT_OK(vset->Recover(column_families_, /*read_only=*/false,
                             /*db_id=*/nullptr));

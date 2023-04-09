@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "rocksdb/options.h"
 #include "rocksdb/rocksdb_namespace.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
@@ -39,6 +40,9 @@ enum TraceType : char {
   kIOTracer = 12,
   // Query level tracing related trace type.
   kTraceMultiGet = 13,
+  kMemtableInsertV0 = 14,
+  kMemtableLootupV0 = 15,
+
   // All trace types should be added before kTraceMax
   kTraceMax,
 };

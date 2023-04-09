@@ -25,6 +25,7 @@
 #include "db/db_impl/db_impl.h"
 #include "db/internal_stats.h"
 #include "db/job_context.h"
+#include "db/memtable.h"
 #include "db/range_del_aggregator.h"
 #include "db/table_properties_collector.h"
 #include "db/version_set.h"
@@ -37,6 +38,7 @@
 #include "rocksdb/convenience.h"
 #include "rocksdb/table.h"
 #include "table/merging_iterator.h"
+#include "trace_replay/memtable_tracer.h"
 #include "util/autovector.h"
 #include "util/cast_util.h"
 #include "util/compression.h"
@@ -522,8 +524,9 @@ ColumnFamilyData::ColumnFamilyData(
     const ColumnFamilyOptions& cf_options, const ImmutableDBOptions& db_options,
     const FileOptions* file_options, ColumnFamilySet* column_family_set,
     BlockCacheTracer* const block_cache_tracer,
-    const std::shared_ptr<IOTracer>& io_tracer, const std::string& db_id,
-    const std::string& db_session_id)
+    const std::shared_ptr<IOTracer>& io_tracer,
+    const std::shared_ptr<MemtableTracer>& memtable_tracer,
+    const std::string& db_id, const std::string& db_session_id)
     : id_(id),
       name_(name),
       dummy_versions_(_dummy_versions),
@@ -541,7 +544,8 @@ ColumnFamilyData::ColumnFamilyData(
       mem_(nullptr),
       imm_(ioptions_.min_write_buffer_number_to_merge,
            ioptions_.max_write_buffer_number_to_maintain,
-           ioptions_.max_write_buffer_size_to_maintain),
+           ioptions_.max_write_buffer_size_to_maintain,
+           const_cast<std::shared_ptr<MemtableTracer>&>(memtable_tracer)),
       super_version_(nullptr),
       super_version_number_(0),
       local_sv_(new ThreadLocalPtr(&SuperVersionUnrefHandle)),
@@ -1513,22 +1517,22 @@ void ColumnFamilyData::RecoverEpochNumbers() {
   vstorage->RecoverEpochNumbers(this);
 }
 
-ColumnFamilySet::ColumnFamilySet(const std::string& dbname,
-                                 const ImmutableDBOptions* db_options,
-                                 const FileOptions& file_options,
-                                 Cache* table_cache,
-                                 WriteBufferManager* _write_buffer_manager,
-                                 WriteController* _write_controller,
-                                 BlockCacheTracer* const block_cache_tracer,
-                                 const std::shared_ptr<IOTracer>& io_tracer,
-                                 const std::string& db_id,
-                                 const std::string& db_session_id)
+ColumnFamilySet::ColumnFamilySet(
+    const std::string& dbname, const ImmutableDBOptions* db_options,
+    const FileOptions& file_options, Cache* table_cache,
+    WriteBufferManager* _write_buffer_manager,
+    WriteController* _write_controller,
+    BlockCacheTracer* const block_cache_tracer,
+    const std::shared_ptr<IOTracer>& io_tracer,
+    const std::shared_ptr<MemtableTracer>& memtable_tracer,
+    const std::string& db_id, const std::string& db_session_id)
     : max_column_family_(0),
       file_options_(file_options),
       dummy_cfd_(new ColumnFamilyData(
           ColumnFamilyData::kDummyColumnFamilyDataId, "", nullptr, nullptr,
           nullptr, ColumnFamilyOptions(), *db_options, &file_options_, nullptr,
-          block_cache_tracer, io_tracer, db_id, db_session_id)),
+          block_cache_tracer, io_tracer, memtable_tracer, db_id,
+          db_session_id)),
       default_cfd_cache_(nullptr),
       db_name_(dbname),
       db_options_(db_options),
@@ -1537,6 +1541,7 @@ ColumnFamilySet::ColumnFamilySet(const std::string& dbname,
       write_controller_(_write_controller),
       block_cache_tracer_(block_cache_tracer),
       io_tracer_(io_tracer),
+      memtable_tracer_(memtable_tracer),
       db_id_(db_id),
       db_session_id_(db_session_id) {
   // initialize linked list
@@ -1605,7 +1610,7 @@ ColumnFamilyData* ColumnFamilySet::CreateColumnFamily(
   ColumnFamilyData* new_cfd = new ColumnFamilyData(
       id, name, dummy_versions, table_cache_, write_buffer_manager_, options,
       *db_options_, &file_options_, this, block_cache_tracer_, io_tracer_,
-      db_id_, db_session_id_);
+      memtable_tracer_, db_id_, db_session_id_);
   column_families_.insert({name, id});
   column_family_data_.insert({id, new_cfd});
   max_column_family_ = std::max(max_column_family_, id);

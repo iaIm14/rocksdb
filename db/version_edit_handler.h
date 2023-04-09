@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "db/memtable.h"
 #include "db/version_builder.h"
 #include "db/version_edit.h"
 #include "db/version_set.h"
@@ -111,12 +112,13 @@ class VersionEditHandler : public VersionEditHandlerBase {
       VersionSet* version_set, bool track_missing_files,
       bool no_error_if_files_missing,
       const std::shared_ptr<IOTracer>& io_tracer,
+      const std::shared_ptr<MemtableTracer>& memtable_tracer,
       EpochNumberRequirement epoch_number_requirement =
           EpochNumberRequirement::kMustPresent)
-      : VersionEditHandler(read_only, column_families, version_set,
-                           track_missing_files, no_error_if_files_missing,
-                           io_tracer, /*skip_load_table_files=*/false,
-                           epoch_number_requirement) {}
+      : VersionEditHandler(
+            read_only, column_families, version_set, track_missing_files,
+            no_error_if_files_missing, io_tracer, memtable_tracer,
+            /*skip_load_table_files=*/false, epoch_number_requirement) {}
 
   ~VersionEditHandler() override {}
 
@@ -137,7 +139,9 @@ class VersionEditHandler : public VersionEditHandlerBase {
       bool read_only, std::vector<ColumnFamilyDescriptor> column_families,
       VersionSet* version_set, bool track_missing_files,
       bool no_error_if_files_missing,
-      const std::shared_ptr<IOTracer>& io_tracer, bool skip_load_table_files,
+      const std::shared_ptr<IOTracer>& io_tracer,
+      const std::shared_ptr<MemtableTracer>& memtable_tracer,
+      bool skip_load_table_files,
       EpochNumberRequirement epoch_number_requirement =
           EpochNumberRequirement::kMustPresent);
 
@@ -191,6 +195,7 @@ class VersionEditHandler : public VersionEditHandlerBase {
   std::unordered_map<uint32_t, uint64_t> cf_to_missing_blob_files_high_;
   bool no_error_if_files_missing_;
   std::shared_ptr<IOTracer> io_tracer_;
+  std::shared_ptr<MemtableTracer> memtable_tracer_;
   bool skip_load_table_files_;
   bool initialized_;
   std::unique_ptr<std::unordered_map<uint32_t, std::string>> cf_to_cmp_names_;
@@ -212,6 +217,7 @@ class VersionEditHandlerPointInTime : public VersionEditHandler {
   VersionEditHandlerPointInTime(
       bool read_only, std::vector<ColumnFamilyDescriptor> column_families,
       VersionSet* version_set, const std::shared_ptr<IOTracer>& io_tracer,
+      const std::shared_ptr<MemtableTracer>& memtable_tracer,
       EpochNumberRequirement epoch_number_requirement =
           EpochNumberRequirement::kMustPresent);
   ~VersionEditHandlerPointInTime() override;
@@ -235,13 +241,14 @@ class VersionEditHandlerPointInTime : public VersionEditHandler {
 
 class ManifestTailer : public VersionEditHandlerPointInTime {
  public:
-  explicit ManifestTailer(std::vector<ColumnFamilyDescriptor> column_families,
-                          VersionSet* version_set,
-                          const std::shared_ptr<IOTracer>& io_tracer,
-                          EpochNumberRequirement epoch_number_requirement =
-                              EpochNumberRequirement::kMustPresent)
+  explicit ManifestTailer(
+      std::vector<ColumnFamilyDescriptor> column_families,
+      VersionSet* version_set, const std::shared_ptr<IOTracer>& io_tracer,
+      const std::shared_ptr<MemtableTracer>& memtable_tracer,
+      EpochNumberRequirement epoch_number_requirement =
+          EpochNumberRequirement::kMustPresent)
       : VersionEditHandlerPointInTime(/*read_only=*/false, column_families,
-                                      version_set, io_tracer,
+                                      version_set, io_tracer, memtable_tracer,
                                       epoch_number_requirement),
         mode_(Mode::kRecovery) {}
 
@@ -281,12 +288,13 @@ class DumpManifestHandler : public VersionEditHandler {
  public:
   DumpManifestHandler(std::vector<ColumnFamilyDescriptor> column_families,
                       VersionSet* version_set,
-                      const std::shared_ptr<IOTracer>& io_tracer, bool verbose,
-                      bool hex, bool json)
+                      const std::shared_ptr<IOTracer>& io_tracer,
+                      const std::shared_ptr<MemtableTracer>& memtable_tracer,
+                      bool verbose, bool hex, bool json)
       : VersionEditHandler(
             /*read_only=*/true, column_families, version_set,
             /*track_missing_files=*/false,
-            /*no_error_if_files_missing=*/false, io_tracer,
+            /*no_error_if_files_missing=*/false, io_tracer, memtable_tracer,
             /*skip_load_table_files=*/true),
         verbose_(verbose),
         hex_(hex),

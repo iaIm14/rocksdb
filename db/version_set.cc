@@ -2090,6 +2090,7 @@ Version::Version(ColumnFamilyData* column_family_data, VersionSet* vset,
                  const FileOptions& file_opt,
                  const MutableCFOptions mutable_cf_options,
                  const std::shared_ptr<IOTracer>& io_tracer,
+                 const std::shared_ptr<MemtableTracer>& memtable_tracer,
                  uint64_t version_number,
                  EpochNumberRequirement epoch_number_requirement)
     : env_(vset->env_),
@@ -4826,12 +4827,13 @@ VersionSet::VersionSet(const std::string& dbname,
                        WriteController* write_controller,
                        BlockCacheTracer* const block_cache_tracer,
                        const std::shared_ptr<IOTracer>& io_tracer,
+                       const std::shared_ptr<MemtableTracer>& memtable_tracer,
                        const std::string& db_id,
                        const std::string& db_session_id)
     : column_family_set_(new ColumnFamilySet(
           dbname, _db_options, storage_options, table_cache,
           write_buffer_manager, write_controller, block_cache_tracer, io_tracer,
-          db_id, db_session_id)),
+          memtable_tracer_, db_id, db_session_id)),
       table_cache_(table_cache),
       env_(_db_options->env),
       fs_(_db_options->fs, io_tracer),
@@ -4877,9 +4879,10 @@ void VersionSet::Reset() {
     // https://github.com/facebook/rocksdb/blob/v7.3.1/db/db_impl/db_impl_open.cc#L527
     // Note: we may not be able to recover db_id from MANIFEST if
     // options.write_dbid_to_manifest is false (default).
-    column_family_set_.reset(new ColumnFamilySet(
-        dbname_, db_options_, file_options_, table_cache_, wbm, wc,
-        block_cache_tracer_, io_tracer_, db_id_, db_session_id_));
+    column_family_set_.reset(
+        new ColumnFamilySet(dbname_, db_options_, file_options_, table_cache_,
+                            wbm, wc, block_cache_tracer_, io_tracer_,
+                            memtable_tracer_, db_id_, db_session_id_));
   }
   db_id_.clear();
   next_file_number_.store(2);
@@ -5020,7 +5023,7 @@ Status VersionSet::ProcessManifestWrites(
         if (!last_writer->IsAllWalEdits()) {
           version = new Version(last_writer->cfd, this, file_options_,
                                 last_writer->mutable_cf_options, io_tracer_,
-                                current_version_number_++);
+                                memtable_tracer_, current_version_number_++);
           versions.push_back(version);
           mutable_cf_options_ptrs.push_back(&last_writer->mutable_cf_options);
           builder_guards.emplace_back(
@@ -5685,7 +5688,7 @@ Status VersionSet::Recover(
     VersionEditHandler handler(
         read_only, column_families, const_cast<VersionSet*>(this),
         /*track_missing_files=*/false, no_error_if_files_missing, io_tracer_,
-        EpochNumberRequirement::kMightMissing);
+        memtable_tracer_, EpochNumberRequirement::kMightMissing);
     handler.Iterate(reader, &log_read_status);
     s = handler.status();
     if (s.ok()) {
@@ -5857,7 +5860,7 @@ Status VersionSet::TryRecoverFromOneManifest(
                      /*checksum=*/true, /*log_num=*/0);
   VersionEditHandlerPointInTime handler_pit(
       read_only, column_families, const_cast<VersionSet*>(this), io_tracer_,
-      EpochNumberRequirement::kMightMissing);
+      memtable_tracer_, EpochNumberRequirement::kMightMissing);
 
   handler_pit.Iterate(reader, &s);
 
@@ -5950,6 +5953,7 @@ Status VersionSet::ReduceNumberOfLevels(const std::string& dbname,
   WriteBufferManager wb(options->db_write_buffer_size);
   VersionSet versions(dbname, &db_options, file_options, tc.get(), &wb, &wc,
                       nullptr /*BlockCacheTracer*/, nullptr /*IOTracer*/,
+                      nullptr /*MemtableTracer*/,
                       /*db_id*/ "",
                       /*db_session_id*/ "");
   Status status;
@@ -6129,7 +6133,8 @@ Status VersionSet::DumpManifest(Options& options, std::string& dscname,
     cf_descs.emplace_back(cf, options);
   }
 
-  DumpManifestHandler handler(cf_descs, this, io_tracer_, verbose, hex, json);
+  DumpManifestHandler handler(cf_descs, this, io_tracer_, memtable_tracer_,
+                              verbose, hex, json);
   {
     VersionSet::LogReporter reporter;
     reporter.status = &s;
@@ -6817,7 +6822,8 @@ ColumnFamilyData* VersionSet::CreateColumnFamily(
 
   MutableCFOptions dummy_cf_options;
   Version* dummy_versions =
-      new Version(nullptr, this, file_options_, dummy_cf_options, io_tracer_);
+      new Version(nullptr, this, file_options_, dummy_cf_options, io_tracer_,
+                  memtable_tracer_);
   // Ref() dummy version once so that later we can call Unref() to delete it
   // by avoiding calling "delete" explicitly (~Version is private)
   dummy_versions->Ref();
@@ -6827,7 +6833,7 @@ ColumnFamilyData* VersionSet::CreateColumnFamily(
 
   Version* v = new Version(new_cfd, this, file_options_,
                            *new_cfd->GetLatestMutableCFOptions(), io_tracer_,
-                           current_version_number_++);
+                           memtable_tracer_, current_version_number_++);
 
   constexpr bool update_stats = false;
 
@@ -6945,10 +6951,12 @@ ReactiveVersionSet::ReactiveVersionSet(
     const std::string& dbname, const ImmutableDBOptions* _db_options,
     const FileOptions& _file_options, Cache* table_cache,
     WriteBufferManager* write_buffer_manager, WriteController* write_controller,
-    const std::shared_ptr<IOTracer>& io_tracer)
+    const std::shared_ptr<IOTracer>& io_tracer,
+    const std::shared_ptr<MemtableTracer>& memtable_tracer)
     : VersionSet(dbname, _db_options, _file_options, table_cache,
                  write_buffer_manager, write_controller,
-                 /*block_cache_tracer=*/nullptr, io_tracer, /*db_id*/ "",
+                 /*block_cache_tracer=*/nullptr, io_tracer, memtable_tracer,
+                 /*db_id*/ "",
                  /*db_session_id*/ "") {}
 
 ReactiveVersionSet::~ReactiveVersionSet() {}
@@ -6973,9 +6981,9 @@ Status ReactiveVersionSet::Recover(
   log::Reader* reader = manifest_reader->get();
   assert(reader);
 
-  manifest_tailer_.reset(
-      new ManifestTailer(column_families, const_cast<ReactiveVersionSet*>(this),
-                         io_tracer_, EpochNumberRequirement::kMightMissing));
+  manifest_tailer_.reset(new ManifestTailer(
+      column_families, const_cast<ReactiveVersionSet*>(this), io_tracer_,
+      memtable_tracer_, EpochNumberRequirement::kMightMissing));
 
   manifest_tailer_->Iterate(*reader, manifest_reader_status->get());
 
