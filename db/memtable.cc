@@ -1405,8 +1405,9 @@ void MemTable::GetFromTable(
   *seq = saver.seq;
 
   if (memtable_tracer_ != nullptr && memtable_tracer_->is_tracing_enabled()) {
-    MemtableTraceRecord record(clock_->NowNanos(), TraceType::kMemtableLootupV0,
-                               GetID(), *seq, &key, *saver.value);
+    MemtableTraceRecord record(clock_->NowMicros(),
+                               TraceType::kMemtableLootupV0, GetID(), *seq,
+                               &key, *saver.value);
     memtable_tracer_->WriteMemtableOp(record);
   }
 }
