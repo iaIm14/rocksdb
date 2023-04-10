@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <fstream>
 #include <memory>
+#include <utility>
 
 #include "db/dbformat.h"
 #include "db/lookup_key.h"
@@ -17,6 +18,8 @@
 #include "rocksdb/types.h"
 #include "trace_replay/io_tracer.h"
 #include "trace_replay/trace_replay.h"
+#include "util/logger.hpp"
+#include "util/macro.hpp"
 
 namespace ROCKSDB_NAMESPACE {
 class SystemClock;
@@ -33,12 +36,24 @@ struct MemtableTraceRecord {
   uint64_t memtable_id_{0};
   SequenceNumber seq_number{0};
 
-  std::pair<Slice, Slice> kv;
+  std::pair<std::string, std::string> kv;
   // Add or Update
   ValueType type;
   uint32_t key_size;
   uint32_t val_size;
 
+  MemtableTraceRecord() = default;
+  // MemtableTraceRecord(const MemtableTraceRecord& record_)
+  //     : access_timestamp(record_.access_timestamp),
+  //       trace_type(record_.trace_type),
+  //       memtable_id_(record_.memtable_id_),
+  //       seq_number(record_.seq_number),
+  //       kv(std::make_pair(record_.kv.first, record_.kv.second)),
+  //       type(record_.type),
+  //       key_size(record_.key_size),
+  //       val_size(record_.val_size) {
+  //   LOG("copy constructor");
+  // }
   MemtableTraceRecord(const uint64_t& _access_timestamp,
                       const TraceType& _trace_type,
                       const uint64_t& _memtable_id,
@@ -48,11 +63,15 @@ struct MemtableTraceRecord {
         trace_type(_trace_type),
         memtable_id_(_memtable_id),
         seq_number(_seq_number),
-        kv(std::make_pair<Slice, Slice>(Slice(_key->memtable_key()),
-                                        Slice(_value))),
+        kv(),
         type(ValueType::kMaxValue),
         key_size(0),
-        val_size(0) {}
+        val_size(0) {
+    std::string raw_key = _key->user_key().data();
+    raw_key = raw_key.substr(0, _key->user_key().size());
+    Slice slice_key(raw_key);
+    kv = std::make_pair(slice_key.data(), _value);
+  }
 
   MemtableTraceRecord(const uint64_t& _access_timestamp,
                       const TraceType& _trace_type,
@@ -64,7 +83,7 @@ struct MemtableTraceRecord {
         trace_type(_trace_type),
         memtable_id_(_memtable_id),
         seq_number(_seq_number),
-        kv(std::make_pair(_key, _value)),
+        kv(std::make_pair(_key.data(), _value.data())),
         type(_value_type),
         key_size(_key_size),
         val_size(_val_size) {}
@@ -98,8 +117,7 @@ class MemtableTraceWriter {
 
 class MemtableTraceReader {
  public:
-  explicit MemtableTraceReader(std::unique_ptr<TraceReader>&& reader)
-      : trace_reader_(std::move(reader)) {}
+  explicit MemtableTraceReader(std::unique_ptr<TraceReader>&& reader);
   ~MemtableTraceReader() = default;
 
   MemtableTraceReader(const MemtableTraceReader&) = delete;

@@ -864,6 +864,7 @@ set(SOURCES
         tools/block_cache_analyzer/block_cache_trace_analyzer.cc
         tools/dump/db_dump_tool.cc
         tools/io_tracer_parser_tool.cc
+        tools/memtable_tracer_parser_tool.cc
         tools/ldb_cmd.cc
         tools/ldb_tool.cc
         tools/sst_dump_tool.cc
@@ -1544,6 +1545,7 @@ if(WITH_TESTS)
     dev/trace_query_test.cpp
     dev/trace_io_test.cpp
     dev/trace_block_cache_test.cpp
+    dev/trace_memtable_test.cpp
   )
   foreach(sourcefile ${DEVELOP})
       message(STATUS "CHECK DEV: ${sourcefile}")
@@ -1636,6 +1638,9 @@ if(WITH_TRACE_TOOLS)
   target_link_libraries(io_tracer_parser${ARTIFACT_SUFFIX}
   ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS})
 
+  add_executable(memtable_tracer_parser${ARTIFACT_SUFFIX} tools/memtable_tracer_parser.cc)
+  target_link_libraries(memtable_tracer_parser${ARTIFACT_SUFFIX}
+  ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS})
 endif()
 
 if(WITH_CORE_TOOLS OR WITH_TOOLS)

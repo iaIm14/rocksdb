@@ -72,6 +72,9 @@ Status MemtableTraceWriter::WriteHeader() {
   TracerHelper::EncodeTrace(trace, &encoded_trace);
   return writer_->Write(encoded_trace);
 }
+
+MemtableTraceReader::MemtableTraceReader(std::unique_ptr<TraceReader>&& reader)
+    : trace_reader_(std::move(reader)) {}
 Status MemtableTraceReader::ReadHeader(MemtableTraceHeader* header) {
   assert(header != nullptr);
   std::string encoded_trace;
@@ -155,7 +158,9 @@ Status MemtableTraceReader::ReadMemtableOp(MemtableTraceRecord* record) {
         return Status::Incomplete(
             "Incomplete access record: Failed to read insert value");
       }
-      record->kv = kvpair;
+      record->kv =
+          std::make_pair(std::string(kvpair.first.data(), kvpair.first.size()),
+                         kvpair.second.data());
     } break;
     case TraceType::kMemtableLootupV0: {
       std::pair<Slice, Slice> kvpair;
@@ -167,7 +172,9 @@ Status MemtableTraceReader::ReadMemtableOp(MemtableTraceRecord* record) {
         return Status::Incomplete(
             "Incomplete access record: Failed to read insert value");
       }
-      record->kv = kvpair;
+      record->kv =
+          std::make_pair(std::string(kvpair.first.data(), kvpair.first.size()),
+                         kvpair.second.data());
     } break;
     default:
       return Status::Aborted("trace record Type unrecognized");

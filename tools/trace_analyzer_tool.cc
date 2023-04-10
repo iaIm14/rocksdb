@@ -4,6 +4,7 @@
 //  (found in the LICENSE.Apache file in the root directory).
 //
 
+#include "util/macro.hpp"
 #ifdef GFLAGS
 #ifdef NUMA
 #include <numa.h>
@@ -803,10 +804,13 @@ Status TraceAnalyzer::MakeStatisticQPS() {
         if (time_it.first >= duration) {
           continue;
         }
+        LOG("qps info: ", time_it.first, time_it.second);
         type_qps[time_it.first][kTaTypeNum] += time_it.second;
         type_qps[time_it.first][type] += time_it.second;
         cf_qps_sum += time_it.second;
         if (time_it.second > stat.second.a_peak_qps) {
+          LOG("[CHECK] update a_peak_qps, from ", stat.second.a_peak_qps,
+              " to ", time_it.second);
           stat.second.a_peak_qps = time_it.second;
         }
         if (stat.second.a_qps_f) {
@@ -1200,7 +1204,7 @@ Status TraceAnalyzer::KeyStatsInsertion(const uint32_t& type,
   if (FLAGS_output_prefix_cut > 0) {
     prefix = key.substr(0, FLAGS_output_prefix_cut);
   }
-
+  // DEBUG
   if (begin_time_ == 0) {
     begin_time_ = ts;
   }
@@ -1281,6 +1285,7 @@ Status TraceAnalyzer::KeyStatsInsertion(const uint32_t& type,
     if (found_qps == found_stats->second.a_qps_stats.end()) {
       found_stats->second.a_qps_stats[time_in_sec] = 1;
     } else {
+      // QPS CHECK
       found_qps->second++;
     }
 

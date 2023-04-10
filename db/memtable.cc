@@ -16,6 +16,7 @@
 
 #include "db/dbformat.h"
 #include "db/kv_checksum.h"
+#include "db/lookup_key.h"
 #include "db/merge_context.h"
 #include "db/merge_helper.h"
 #include "db/pinned_iterators_manager.h"
@@ -762,9 +763,11 @@ Status MemTable::Add(SequenceNumber s, ValueType type,
 
   // memtable tracing insert
   if (memtable_tracer_ != nullptr && memtable_tracer_->is_tracing_enabled()) {
-    MemtableTraceRecord record(clock_->NowNanos(), TraceType::kMemtableInsertV0,
-                               GetID(), s, key, value, key_size, val_size,
-                               type);
+    std::string raw_key = key.data();
+    raw_key = raw_key.substr(0, key_size);
+    MemtableTraceRecord record(clock_->NowMicros(),
+                               TraceType::kMemtableInsertV0, GetID(), s,
+                               raw_key, value, key_size, val_size, type);
     memtable_tracer_->WriteMemtableOp(record);
   }
   if (!allow_concurrent) {
@@ -912,6 +915,7 @@ struct Saver {
   bool* is_blob_index;
   bool allow_data_in_errors;
   size_t protection_bytes_per_key;
+  std::shared_ptr<MemtableTracer> memtable_tracer;
   bool CheckCallback(SequenceNumber _seq) {
     if (callback_) {
       return callback_->IsVisible(_seq);
@@ -1396,16 +1400,17 @@ void MemTable::GetFromTable(
   saver.do_merge = do_merge;
   saver.allow_data_in_errors = moptions_.allow_data_in_errors;
   saver.protection_bytes_per_key = moptions_.protection_bytes_per_key;
-
+  saver.memtable_tracer = memtable_tracer_;
   table_->Get(key, &saver, SaveValue);
   *seq = saver.seq;
+
   if (memtable_tracer_ != nullptr && memtable_tracer_->is_tracing_enabled()) {
     MemtableTraceRecord record(clock_->NowNanos(), TraceType::kMemtableLootupV0,
                                GetID(), *seq, &key, *saver.value);
     memtable_tracer_->WriteMemtableOp(record);
   }
 }
-
+SystemClock* MemTable::GetSystemClock() { return clock_; }
 void MemTable::MultiGet(
     const ReadOptions& read_options, MultiGetRange* range,
     ReadCallback* callback, bool immutable_memtable,
