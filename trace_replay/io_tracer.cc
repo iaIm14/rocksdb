@@ -35,6 +35,7 @@ Status IOTraceWriter::WriteIOOp(const IOTraceRecord& record,
   Trace trace;
   trace.ts = record.access_timestamp;
   trace.type = record.trace_type;
+  PutFixed32(&trace.payload, record.check_);
   PutFixed64(&trace.payload, record.io_op_data);
   Slice file_operation(record.file_operation);
   PutLengthPrefixedSlice(&trace.payload, file_operation);
@@ -169,7 +170,12 @@ Status IOTraceReader::ReadIOOp(IOTraceRecord* record) {
   record->access_timestamp = trace.ts;
   record->trace_type = trace.type;
   Slice enc_slice = Slice(trace.payload);
-
+  uint32_t check_type = 0;
+  if (!GetFixed32(&enc_slice, &check_type)) {
+    return Status::Incomplete(
+        "Incompleted access record: Failed to read check type.");
+  }
+  record->check_ = (int)check_type;
   if (!GetFixed64(&enc_slice, &record->io_op_data)) {
     return Status::Incomplete(
         "Incomplete access record: Failed to read trace data.");

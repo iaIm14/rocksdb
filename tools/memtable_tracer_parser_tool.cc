@@ -109,7 +109,6 @@ int MemtableTraceRecordParser::ReadMemtableTraceRecords() {
     }
     PrintHumanReadableMemtableTraceRecord(record, fs);
     if (if_analyze) {
-      LOG("analyze record= ", record.kv.first);
       KeyStatsInsertion(
           record.access_timestamp,
           (record.trace_type == TraceType::kMemtableInsertV0)

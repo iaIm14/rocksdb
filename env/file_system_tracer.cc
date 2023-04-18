@@ -227,7 +227,7 @@ IOStatus FSSequentialFileTracingWrapper::Read(size_t n,
   io_op_data |= (1 << IOTraceOp::kIOLen);
   IOTraceRecord io_record(clock_->NowNanos(), TraceType::kIOTracer, io_op_data,
                           __func__, elapsed, s.ToString(), file_name_,
-                          result->size(), 0 /*Offset*/);
+                          result->size(), 0 /*Offset*/, 2);
   io_tracer_->WriteIOOp(io_record, dbg);
   return s;
 }
@@ -261,7 +261,7 @@ IOStatus FSSequentialFileTracingWrapper::PositionedRead(
   io_op_data |= (1 << IOTraceOp::kIOOffset);
   IOTraceRecord io_record(clock_->NowNanos(), TraceType::kIOTracer, io_op_data,
                           __func__, elapsed, s.ToString(), file_name_,
-                          result->size(), offset);
+                          result->size(), offset, 2);
   io_tracer_->WriteIOOp(io_record, dbg);
   return s;
 }
@@ -279,7 +279,7 @@ IOStatus FSRandomAccessFileTracingWrapper::Read(uint64_t offset, size_t n,
   io_op_data |= (1 << IOTraceOp::kIOOffset);
   IOTraceRecord io_record(clock_->NowNanos(), TraceType::kIOTracer, io_op_data,
                           __func__, elapsed, s.ToString(), file_name_, n,
-                          offset);
+                          offset, 2);
   io_tracer_->WriteIOOp(io_record, dbg);
   return s;
 }
@@ -299,7 +299,7 @@ IOStatus FSRandomAccessFileTracingWrapper::MultiRead(FSReadRequest* reqs,
   for (size_t i = 0; i < num_reqs; i++) {
     IOTraceRecord io_record(
         clock_->NowNanos(), TraceType::kIOTracer, io_op_data, __func__, latency,
-        reqs[i].status.ToString(), file_name_, reqs[i].len, reqs[i].offset);
+        reqs[i].status.ToString(), file_name_, reqs[i].len, reqs[i].offset, 2);
     io_tracer_->WriteIOOp(io_record, dbg);
   }
   return s;
@@ -375,7 +375,7 @@ void FSRandomAccessFileTracingWrapper::ReadAsyncCallback(
   IOTraceRecord io_record(clock_->NowNanos(), TraceType::kIOTracer, io_op_data,
                           read_async_cb_info->file_op_, elapsed,
                           req.status.ToString(), file_name_, req.result.size(),
-                          req.offset);
+                          req.offset, 2);
   io_tracer_->WriteIOOp(io_record, nullptr /*dbg*/);
 
   // call the underlying callback.
@@ -394,7 +394,7 @@ IOStatus FSWritableFileTracingWrapper::Append(const Slice& data,
   io_op_data |= (1 << IOTraceOp::kIOLen);
   IOTraceRecord io_record(clock_->NowNanos(), TraceType::kIOTracer, io_op_data,
                           __func__, elapsed, s.ToString(), file_name_,
-                          data.size(), 0 /*Offset*/);
+                          data.size(), 0 /*Offset*/, 1);
   io_tracer_->WriteIOOp(io_record, dbg);
   return s;
 }
@@ -411,7 +411,7 @@ IOStatus FSWritableFileTracingWrapper::PositionedAppend(
   io_op_data |= (1 << IOTraceOp::kIOOffset);
   IOTraceRecord io_record(clock_->NowNanos(), TraceType::kIOTracer, io_op_data,
                           __func__, elapsed, s.ToString(), file_name_,
-                          data.size(), offset);
+                          data.size(), offset, 1);
   io_tracer_->WriteIOOp(io_record, dbg);
   return s;
 }
@@ -487,7 +487,7 @@ IOStatus FSRandomRWFileTracingWrapper::Write(uint64_t offset, const Slice& data,
   io_op_data |= (1 << IOTraceOp::kIOOffset);
   IOTraceRecord io_record(clock_->NowNanos(), TraceType::kIOTracer, io_op_data,
                           __func__, elapsed, s.ToString(), file_name_,
-                          data.size(), offset);
+                          data.size(), offset, 1);
   io_tracer_->WriteIOOp(io_record, dbg);
   return s;
 }
@@ -505,7 +505,7 @@ IOStatus FSRandomRWFileTracingWrapper::Read(uint64_t offset, size_t n,
   io_op_data |= (1 << IOTraceOp::kIOOffset);
   IOTraceRecord io_record(clock_->NowNanos(), TraceType::kIOTracer, io_op_data,
                           __func__, elapsed, s.ToString(), file_name_, n,
-                          offset);
+                          offset, 2);
   io_tracer_->WriteIOOp(io_record, dbg);
   return s;
 }
