@@ -1,2 +1,2 @@
-memtable id: 1 total Insert: 21540 speed: 10770 total Lookup: 50829 speed: 25414.5
-Insert peak-qps: 10968 Lookup peak-qps: 25743 
+memtable id: 1 total Insert: 17464 speed: 8732 total Lookup: 41326 speed: 20663
+Insert peak-qps: 8869 Lookup peak-qps: 21089 

@@ -20,7 +20,8 @@
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;
 
 DEFINE_string(io_trace_file, "", "The IO trace file path.");
-
+DEFINE_string(dump_result_dir, "", "set directory of analyze result");
+DEFINE_string(if_analyze, "", "set true if want to analyze");
 namespace ROCKSDB_NAMESPACE {
 
 IOTraceRecordParser::IOTraceRecordParser(const std::string& input_file)
@@ -33,6 +34,10 @@ void IOTraceRecordParser::PrintHumanReadableHeader(
      << "\nRocksDB Major Version: " << header.rocksdb_major_version
      << "\nRocksDB Minor Version: " << header.rocksdb_minor_version << "\n";
   fprintf(stdout, "%s", ss.str().c_str());
+  if (if_analyze) {
+    stats.begin_time = header.start_time;
+    stats.end_time = header.start_time;
+  }
 }
 
 void IOTraceRecordParser::PrintHumanReadableIOTraceRecord(
@@ -122,8 +127,55 @@ int IOTraceRecordParser::ReadIOTraceRecords() {
       break;
     }
     PrintHumanReadableIOTraceRecord(record);
+    if (if_analyze) {
+      if (record.check_ == 0) {
+        continue;
+      } else if (record.check_ == 1) {
+        KeyStatsInsertion(record.access_timestamp, TraceIOType::Write,
+                          record.len);
+      } else {
+        KeyStatsInsertion(record.access_timestamp, TraceIOType::Read,
+                          record.len);
+      }
+    }
+  }
+  if (if_analyze) {
+    if (FLAGS_dump_result_dir.empty()) {
+      fprintf(stderr, "havn't set analyze result dump dir");
+      return 1;
+    }
+    std::fstream fs1(FLAGS_dump_result_dir + "/io.txt", std::ios::out);
+    fs1 << "******** Analyze IO speed ********" << std::endl;
+    if ((stats.end_time - stats.begin_time) != 0) {
+      stats.overall_read_speed =
+          (double)stats.total_read_len /
+          ((stats.end_time - stats.begin_time) / 1000000000);
+      stats.overall_write_speed =
+          (double)stats.total_write_len /
+          ((stats.end_time - stats.begin_time) / 1000000000);
+    }
+    fs1 << "Read Bytes: " << stats.total_read_len << ' '
+        << "Read Speed: " << stats.overall_read_speed
+        << " Write Bytes: " << stats.total_write_len
+        << " Write Speed: " << stats.overall_write_speed << std::endl;
   }
   return 0;
+}
+
+Status IOTraceRecordParser::KeyStatsInsertion(const uint64_t ts,
+                                              const TraceIOType& type,
+                                              const uint64_t& len) {
+  Status s = Status::OK();
+  switch (type) {
+    case TraceIOType::Read: {
+      stats.total_read_len += len;
+    } break;
+    case TraceIOType::Write: {
+      stats.total_write_len += len;
+    } break;
+  }
+  stats.end_time = std::max(stats.end_time, ts);
+  return s;
 }
 
 int io_tracer_parser(int argc, char** argv) {
@@ -135,8 +187,15 @@ int io_tracer_parser(int argc, char** argv) {
   }
 
   IOTraceRecordParser io_tracer_parser(FLAGS_io_trace_file);
+  if (FLAGS_if_analyze.empty()) {
+    fprintf(stderr, "analyzer set closed as default");
+  } else {
+    io_tracer_parser.SetAnalyze(true);
+  }
   return io_tracer_parser.ReadIOTraceRecords();
 }
-
+void IOTraceRecordParser::SetAnalyze(bool if_analyze_) {
+  this->if_analyze = if_analyze_;
+}
 }  // namespace ROCKSDB_NAMESPACE
 #endif  // GFLAGS

@@ -11,6 +11,9 @@ cp ../build/trace_analyzer ./
 cp ../build/trace_query_test ./
 cp ../build/memtable_tracer_parser ./
 cp ../build/trace_memtable_test ./
+cp ../build/trace_io_test ./ 
+cp ../build/io_tracer_parser ./
+
 rm -rf memtable_result/
 mkdir memtable_result/
 rm -rf ./data

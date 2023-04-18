@@ -62,26 +62,38 @@ signed main() {
   WriteBatch wb;
   std::chrono::steady_clock::time_point tp_begin =
       std::chrono::steady_clock::now();
+  int randnum = 0;
   for (int i = 1;; i++) {
-    std::pair<std::string, std::string> kvp;
-    kvp.first = std::to_string(i);
+    randnum = rand() % 10;
+    if (randnum < 5) {
+      std::pair<std::string, std::string> kvp;
+      kvp.first = std::to_string(i);
 
-    for (int count = 0; count <= 200; count++) {
-      int srand = rand() % 26;
-      kvp.second.push_back('a' + srand);
+      for (int count = 0; count <= 200; count++) {
+        int srand = rand() % 26;
+        kvp.second.push_back('a' + srand);
+      }
+      wb.Put(kvp.first, kvp.second);
+      // LOG("wb-put: ", kvp.first, " ", kvp.second);
+      db->Write(wo, &wb);
+      wb.Clear();
+    } else {
+      std::string search_key = std::to_string(rand() % i);
+      ReadOptions ro_;
+      std::string ret_value;
+      db->Get(ro_, search_key, &ret_value);
+      // LOG("op-lookup: ", search_key, " ", ret_value);
+      i--;
     }
-    wb.Put(kvp.first, kvp.second);
-    LOG("wb-put: ", kvp.first, " ", kvp.second);
-    db->Write(wo, &wb);
-    wb.Clear();
     auto tp_duration = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::steady_clock::now() - tp_begin);
 
-    if (tp_duration >= std::chrono::milliseconds(5)) {
+    if (tp_duration >= std::chrono::milliseconds(2000)) {
       LOG("End Put Operation, total Put op count = ", i);
       break;
     }
   }
+
   db->EndIOTrace();
   db->Close();
   return 0;

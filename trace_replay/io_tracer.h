@@ -59,7 +59,7 @@ struct IOTraceRecord {
   // Additional information passed in IODebugContext.
   uint64_t trace_data = 0;
   std::string request_id;
-
+  int check_;
   IOTraceRecord() {}
 
   IOTraceRecord(const uint64_t& _access_timestamp, const TraceType& _trace_type,
@@ -73,13 +73,14 @@ struct IOTraceRecord {
         latency(_latency),
         io_status(_io_status),
         file_name(_file_name),
-        file_size(_file_size) {}
+        file_size(_file_size),
+        check_(0) {}
 
   IOTraceRecord(const uint64_t& _access_timestamp, const TraceType& _trace_type,
                 const uint64_t& _io_op_data, const std::string& _file_operation,
                 const uint64_t& _latency, const std::string& _io_status,
                 const std::string& _file_name, const uint64_t& _len,
-                const uint64_t& _offset)
+                const uint64_t& _offset, int check = 0)
       : access_timestamp(_access_timestamp),
         trace_type(_trace_type),
         io_op_data(_io_op_data),
@@ -88,7 +89,8 @@ struct IOTraceRecord {
         io_status(_io_status),
         file_name(_file_name),
         len(_len),
-        offset(_offset) {}
+        offset(_offset),
+        check_(check) {}
 };
 
 struct IOTraceHeader {

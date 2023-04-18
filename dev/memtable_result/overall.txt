@@ -1,2 +1,2 @@
-Overall operations: 72369 , Insert: 21540  Lookup: 50829
-Insert Speed: 10770 Lookup Speed: 25414
+Overall operations: 58790 , Insert: 17464  Lookup: 41326
+Insert Speed: 8732 Lookup Speed: 20663
