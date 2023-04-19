@@ -937,7 +937,20 @@ Status FlushJob::WriteLevel0Table() {
           meta_.fd.GetNumber());
       const SequenceNumber job_snapshot_seq =
           job_context_->GetJobSnapshotSequence();
-      s = BuildTable(
+      // s = BuildTable(
+      //     dbname_, versions_, db_options_, tboptions, file_options_,
+      //     cfd_->table_cache(), iter.get(), std::move(range_del_iters),
+      //     &meta_, &blob_file_additions, existing_snapshots_,
+      //     earliest_write_conflict_snapshot_, job_snapshot_seq,
+      //     snapshot_checker_, mutable_cf_options_.paranoid_file_checks,
+      //     cfd_->internal_stats(), &io_s, io_tracer_,
+      //     BlobFileCreationReason::kFlush, seqno_to_time_mapping_,
+      //     event_logger_, job_context_->job_id, io_priority,
+      //     &table_properties_, write_hint, full_history_ts_low,
+      //     blob_callback_, base_, &num_input_entries, &memtable_payload_bytes,
+      //     &memtable_garbage_bytes);
+      LOG("FlushJob call Switch to cxl task");
+      s = SwitchToCXLTask(
           dbname_, versions_, db_options_, tboptions, file_options_,
           cfd_->table_cache(), iter.get(), std::move(range_del_iters), &meta_,
           &blob_file_additions, existing_snapshots_,

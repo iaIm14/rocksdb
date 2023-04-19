@@ -60,6 +60,7 @@
 #include <iostream>
 #include <thread>
 
+#include "db/memtable.h"
 #include "rocksdb/db.h"
 #include "rocksdb/listener.h"
 #include "rocksdb/options.h"
@@ -85,9 +86,10 @@ signed main() {
   ColumnFamilyOptions cfo;
 
   ColumnFamilyHandle* cf = nullptr;
-  db->CreateColumnFamily(cfo, "cf_pre", &cf);
-  db->Put(WriteOptions(), cf, " const Slice& key", "const Slice& value");
-  db->CXLFlush(FlushOptions(), cf);
+  //   db->CreateColumnFamily(cfo, "cf_pre", &cf);
+  //   db->Put(WriteOptions(), cf, " const Slice& key", "const Slice& value");
+  //   db->CXLFlush(FlushOptions(), cf);
+  //   MemTable* memtable=
   db->Close();
   return 0;
 }
