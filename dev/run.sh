@@ -1,25 +1,27 @@
 #!/usr/bin/zsh
-PROJECT_ROOT="/data/rocksdb"
-cd $PROJECT_ROOT/dev
-rm -rf trace
-rm -rf ./db/*
+PROJECT_ROOT="$(pwd)/../"
+# cd $PROJECT_ROOT/dev
+# rm -rf trace
+# rm -rf ./db/*
 cd $PROJECT_ROOT/build
 cmake ..
 make all -j 14
 cd $PROJECT_ROOT/dev
-cp ../build/trace_analyzer ./
-cp ../build/trace_query_test ./
-cp ../build/memtable_tracer_parser ./
-cp ../build/trace_memtable_test ./
-cp ../build/trace_io_test ./ 
-cp ../build/io_tracer_parser ./
+# cp ../build/trace_analyzer ./
+# cp ../build/trace_query_test ./
+# cp ../build/memtable_tracer_parser ./
+# cp ../build/trace_memtable_test ./
+# cp ../build/trace_io_test ./ 
+# cp ../build/io_tracer_parser ./
 
 rm -rf memtable_result/
 mkdir memtable_result/
 rm -rf ./data
 rm -rf ./trace_memtable
 rm -rf ./Log.log
+cp ../build/shared_memory_* ./
 
+chown -R huanggangqi ../
 # ./trace_block_cache_test
 # ./io_tracer_parser -io_trace_file $PROJECT_ROOT/dev/trace
 # # ./trace_analyzer \
@@ -38,5 +40,4 @@ rm -rf ./Log.log
 # #   -print_top_k_access=3 \
 # #   -output_prefix=test \
 # #   -trace_path=/data/rocksdb/dev/trace
-
 

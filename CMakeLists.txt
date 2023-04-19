@@ -1542,10 +1542,12 @@ if(WITH_TESTS)
   endforeach(sourcefile ${TESTS})
 
   set(DEVELOP 
-    dev/trace_query_test.cpp
-    dev/trace_io_test.cpp
-    dev/trace_block_cache_test.cpp
-    dev/trace_memtable_test.cpp
+    # dev/trace_query_test.cpp
+    # dev/trace_io_test.cpp
+    # dev/trace_block_cache_test.cpp
+    # dev/trace_memtable_test.cpp
+    dev/shared_memory_writter_test.cpp
+    dev/shared_memory_reader_test.cpp
   )
   foreach(sourcefile ${DEVELOP})
       message(STATUS "CHECK DEV: ${sourcefile}")
