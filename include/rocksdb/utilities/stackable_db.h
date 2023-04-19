@@ -377,6 +377,17 @@ class StackableDB : public DB {
     return db_->GetDBOptions();
   }
 
+  using DB::CXLFlush;
+  virtual Status CXLFlush(const FlushOptions& fopts,
+                          ColumnFamilyHandle* column_family) override {
+    return db_->CXLFlush(fopts, column_family);
+  }
+  virtual Status CXLFlush(
+      const FlushOptions& fopts,
+      const std::vector<ColumnFamilyHandle*>& column_families) override {
+    return db_->CXLFlush(fopts, column_families);
+  }
+
   using DB::Flush;
   virtual Status Flush(const FlushOptions& fopts,
                        ColumnFamilyHandle* column_family) override {

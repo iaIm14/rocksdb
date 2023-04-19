@@ -149,6 +149,7 @@ MemTable::MemTable(const InternalKeyComparator& cmp,
 }
 
 MemTable::~MemTable() {
+  LOG("Memtable ", this->GetID(), "destruct, ptr=", this->table_.get());
   mem_tracker_.FreeMem();
   assert(refs_ == 0);
 }

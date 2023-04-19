@@ -18,6 +18,7 @@
 
 #include "memory/allocator.h"
 #include "port/mmap.h"
+#include "port/shm.h"
 #include "rocksdb/env.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -95,6 +96,9 @@ class Arena : public Allocator {
   std::deque<std::unique_ptr<char[]>> blocks_;
   // Huge page allocations
   std::deque<MemMapping> huge_blocks_;
+  // Shared Memory
+  std::deque<ShMMapping> shared_memory_blocks_;
+
   size_t irregular_block_num = 0;
 
   // Stats for current active block.
@@ -110,6 +114,7 @@ class Arena : public Allocator {
   size_t hugetlb_size_ = 0;
 
   char* AllocateFromHugePage(size_t bytes);
+  char* AllocateFromSharedMemory(size_t bytes);
   char* AllocateFallback(size_t bytes, bool aligned);
   char* AllocateNewBlock(size_t block_bytes);
 

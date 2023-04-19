@@ -5,7 +5,6 @@
 
 #pragma once
 
-
 #include <string>
 #include <vector>
 
@@ -209,6 +208,11 @@ class DBImplSecondary : public DBImpl {
                ColumnFamilyHandle* /*column_family*/) override {
     return Status::NotSupported("Not supported operation in secondary mode.");
   }
+  using DBImpl::CXLFlush;
+  Status CXLFlush(const FlushOptions& /*options*/,
+                  ColumnFamilyHandle* /*column_family*/) override {
+    return Status::NotSupported("Not supported operation in secondary mode.");
+  }
 
   using DBImpl::SetDBOptions;
   Status SetDBOptions(const std::unordered_map<std::string, std::string>&
@@ -403,4 +407,3 @@ class DBImplSecondary : public DBImpl {
 };
 
 }  // namespace ROCKSDB_NAMESPACE
-

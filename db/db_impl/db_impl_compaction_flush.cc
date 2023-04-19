@@ -6,6 +6,7 @@
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
+#include <cassert>
 #include <cinttypes>
 #include <deque>
 
@@ -19,6 +20,7 @@
 #include "monitoring/perf_context_imp.h"
 #include "monitoring/thread_status_updater.h"
 #include "monitoring/thread_status_util.h"
+#include "rocksdb/status.h"
 #include "test_util/sync_point.h"
 #include "util/cast_util.h"
 #include "util/concurrent_task_limiter_impl.h"
@@ -1787,6 +1789,43 @@ int DBImpl::Level0StopWriteTrigger(ColumnFamilyHandle* column_family) {
       ->mutable_cf_options.level0_stop_writes_trigger;
 }
 
+Status DBImpl::CXLFlush(const FlushOptions& flush_options,
+                        ColumnFamilyHandle* column_family) {
+  auto cfh = static_cast_with_check<ColumnFamilyHandleImpl>(column_family);
+  ROCKS_LOG_INFO(immutable_db_options_.info_log, "[%s] Manual cxlflush start.",
+                 cfh->GetName().c_str());
+  Status s;
+  if (immutable_db_options_.atomic_flush) {
+    LOG("[ERROR] CXLFlush cannot be Atomic, return Abort");
+    return Status::Aborted("CXLFlush cannot be Atomic");
+  } else {
+    LOG("[info] flush cxl memtable");
+    s = FlushMemTable(cfh->cfd(), flush_options, FlushReason::kManualFlush);
+  }
+
+  ROCKS_LOG_INFO(immutable_db_options_.info_log,
+                 "[%s] Manual cxlflush finished, status: %s\n",
+                 cfh->GetName().c_str(), s.ToString().c_str());
+  return s;
+}
+Status DBImpl::CXLFlush(
+    const FlushOptions& flush_options,
+    const std::vector<ColumnFamilyHandle*>& column_families) {
+  Status s;
+  if (!immutable_db_options_.atomic_flush) {
+    for (auto cfh : column_families) {
+      s = Flush(flush_options, cfh);
+      if (!s.ok()) {
+        break;
+      }
+    }
+  } else {
+    LOG("[ERROR] CXLFlush cannot be Atomic, return Abort");
+    return Status::Aborted("CXLFlush cannot be Atomic");
+  }
+  return s;
+}
+
 Status DBImpl::Flush(const FlushOptions& flush_options,
                      ColumnFamilyHandle* column_family) {
   auto cfh = static_cast_with_check<ColumnFamilyHandleImpl>(column_family);
@@ -2727,6 +2766,37 @@ ColumnFamilyData* DBImpl::PickCompactionFromQueue(
     compaction_queue_.push_front(*iter);
   }
   return cfd;
+}
+void DBImpl::SchedulePendingFlushUseShrMem(const FlushRequest& flush_req) {
+  LOG("[info] DBImpl::SchedulePendingFlushUseShrMem called");
+  mutex_.AssertHeld();
+  if (flush_req.cfd_to_max_mem_id_to_persist.empty()) {
+    return;
+  }
+  if (!immutable_db_options_.atomic_flush) {
+    // For the non-atomic flush case, we never schedule multiple column
+    // families in the same flush request.
+    LOG("[CHECK] not use atomic flush");
+    assert(flush_req.cfd_to_max_mem_id_to_persist.size() == 1);
+    ColumnFamilyData* cfd =
+        flush_req.cfd_to_max_mem_id_to_persist.begin()->first;
+    assert(cfd);
+
+    if (!cfd->queued_for_flush() && cfd->imm()->IsFlushPending()) {
+      cfd->Ref();
+      cfd->set_queued_for_flush(true);
+      ++unscheduled_flushes_;
+      flush_queue_.push_back(flush_req);
+    }
+  } else {
+    LOG("[CHECK-failed] use atomic flush which is unchecked");
+    for (auto& iter : flush_req.cfd_to_max_mem_id_to_persist) {
+      ColumnFamilyData* cfd = iter.first;
+      cfd->Ref();
+    }
+    ++unscheduled_flushes_;
+    flush_queue_.push_back(flush_req);
+  }
 }
 
 void DBImpl::SchedulePendingFlush(const FlushRequest& flush_req) {

@@ -14,6 +14,7 @@
 #include "logging/logging.h"
 #include "port/malloc.h"
 #include "port/port.h"
+#include "port/shm.h"
 #include "rocksdb/env.h"
 #include "test_util/sync_point.h"
 #include "util/string_util.h"
@@ -60,7 +61,7 @@ Arena::~Arena() {
   }
 }
 
-char* Arena::AllocateFallback(size_t bytes, bool aligned) {
+char* Arena::AllocateFallback(size_t bytes, bool aligned /*, bool shared*/) {
   if (bytes > kBlockSize / 4) {
     ++irregular_block_num;
     // Object is more than a quarter of our block size.  Allocate it separately
@@ -71,6 +72,8 @@ char* Arena::AllocateFallback(size_t bytes, bool aligned) {
   // We waste the remaining space in the current block.
   size_t size = 0;
   char* block_head = nullptr;
+  // if (shared) {
+  // }
   if (MemMapping::kHugePageSupported && hugetlb_size_ > 0) {
     size = hugetlb_size_;
     block_head = AllocateFromHugePage(size);
@@ -91,7 +94,18 @@ char* Arena::AllocateFallback(size_t bytes, bool aligned) {
     return unaligned_alloc_ptr_;
   }
 }
-
+char* Arena::AllocateFromSharedMemory(size_t bytes) {
+  ShMMapping shm = ShMMapping::Allocate(bytes);
+  auto addr = static_cast<char*>(shm.Get());
+  if (addr) {
+    shared_memory_blocks_.push_back(std::move(shm));
+    blocks_memory_ += bytes;
+    if (tracker_ != nullptr) {
+      tracker_->Allocate(bytes);
+    }
+  }
+  return addr;
+}
 char* Arena::AllocateFromHugePage(size_t bytes) {
   MemMapping mm = MemMapping::AllocateHuge(bytes);
   auto addr = static_cast<char*>(mm.Get());

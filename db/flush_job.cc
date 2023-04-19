@@ -454,7 +454,7 @@ Status FlushJob::MemPurge() {
         return s;
       }
     }
-
+    // LOF
     new_mem = new MemTable((cfd_->internal_comparator()), *(cfd_->ioptions()),
                            mutable_cf_options_, cfd_->write_buffer_mgr(),
                            earliest_seqno, cfd_->GetID());

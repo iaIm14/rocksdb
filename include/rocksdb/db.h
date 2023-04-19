@@ -1488,6 +1488,15 @@ class DB {
 
   virtual DBOptions GetDBOptions() const = 0;
 
+  virtual Status CXLFlush(const FlushOptions& options,
+                          ColumnFamilyHandle* column_family) = 0;
+  virtual Status CXLFlush(const FlushOptions& options) {
+    return CXLFlush(options, DefaultColumnFamily());
+  }
+  virtual Status CXLFlush(
+      const FlushOptions& options,
+      const std::vector<ColumnFamilyHandle*>& column_families) = 0;
+
   // Flush all memtable data.
   // Flush a single column family, even when atomic flush is enabled. To flush
   // multiple column families, use Flush(options, column_families).

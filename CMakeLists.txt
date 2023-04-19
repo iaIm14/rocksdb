@@ -806,6 +806,7 @@ set(SOURCES
         options/options_helper.cc
         options/options_parser.cc
         port/mmap.cc
+        port/shm.cc
         port/stack_trace.cc
         table/adaptive/adaptive_table_factory.cc
         table/block_based/binary_search_index_reader.cc
@@ -1291,6 +1292,7 @@ if(WITH_TESTS OR WITH_BENCHMARK_TOOLS)
   target_link_libraries(testharness gtest)
 endif()
 
+set(WITH_TESTS false)
 if(WITH_TESTS)
   set(TESTS
         db/db_basic_test.cc
@@ -1541,27 +1543,6 @@ if(WITH_TESTS)
       endif()
   endforeach(sourcefile ${TESTS})
 
-  set(DEVELOP 
-    # dev/trace_query_test.cpp
-    # dev/trace_io_test.cpp
-    # dev/trace_block_cache_test.cpp
-    # dev/trace_memtable_test.cpp
-    dev/shared_memory_writter_test.cpp
-    dev/shared_memory_reader_test.cpp
-  )
-  foreach(sourcefile ${DEVELOP})
-      message(STATUS "CHECK DEV: ${sourcefile}")
-      get_filename_component(exename ${sourcefile} NAME_WE)
-      add_executable(${exename}${ARTIFACT_SUFFIX} ${sourcefile})
-      set_target_properties(${exename}${ARTIFACT_SUFFIX}
-        PROPERTIES EXCLUDE_FROM_DEFAULT_BUILD_RELEASE 1
-        EXCLUDE_FROM_DEFAULT_BUILD_MINRELEASE 1
-        EXCLUDE_FROM_DEFAULT_BUILD_RELWITHDEBINFO 1
-        OUTPUT_NAME ${exename}${ARTIFACT_SUFFIX}
-      )
-      target_link_libraries(${exename}${ARTIFACT_SUFFIX} testutillib${ARTIFACT_SUFFIX} testharness gtest ${THIRDPARTY_LIBS} ${ROCKSDB_LIB})
-  endforeach(sourcefile ${DEVELOP})
-
   if(WIN32)
     # C executables must link to a shared object
     if(ROCKSDB_BUILD_SHARED)
@@ -1582,6 +1563,32 @@ if(WITH_TESTS)
   endif()
 endif()
 
+set(WITH_DEV true)
+if(WITH_DEV)
+  set(DEVELOP 
+  dev/trace_query_test.cpp
+  dev/trace_io_test.cpp
+  dev/trace_block_cache_test.cpp
+  dev/trace_memtable_test.cpp
+  dev/shared_memory_writter_test.cpp
+  dev/shared_memory_reader_test.cpp
+  dev/memtable_refactor_test.cpp
+  )
+  foreach(sourcefile ${DEVELOP})
+    message(STATUS "CHECK DEV: ${sourcefile}")
+    get_filename_component(exename ${sourcefile} NAME_WE)
+    add_executable(${exename}${ARTIFACT_SUFFIX} ${sourcefile})
+    set_target_properties(${exename}${ARTIFACT_SUFFIX}
+      PROPERTIES EXCLUDE_FROM_DEFAULT_BUILD_RELEASE 1
+      EXCLUDE_FROM_DEFAULT_BUILD_MINRELEASE 1
+      EXCLUDE_FROM_DEFAULT_BUILD_RELWITHDEBINFO 1
+      OUTPUT_NAME ${exename}${ARTIFACT_SUFFIX}
+    )
+    target_link_libraries(${exename}${ARTIFACT_SUFFIX} ${THIRDPARTY_LIBS} ${ROCKSDB_LIB})
+  endforeach(sourcefile ${DEVELOP})
+endif()
+
+set(WITH_BENCHMARK_TOOLS false)
 if(WITH_BENCHMARK_TOOLS)
   message(STATUS "built benchmark tools: db_bench${ARTIFACT_SUFFIX}")
   add_executable(db_bench${ARTIFACT_SUFFIX}
@@ -1623,7 +1630,7 @@ if(WITH_BENCHMARK_TOOLS)
     ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS})
 endif()
 
-option(WITH_TRACE_TOOLS "build with trace tools" ON)
+option(WITH_TRACE_TOOLS "build with trace tools" OFF)
 if(WITH_TRACE_TOOLS)
   message(STATUS "built with trace tools")
   add_executable(block_cache_trace_analyzer${ARTIFACT_SUFFIX}

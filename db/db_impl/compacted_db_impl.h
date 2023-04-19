@@ -107,6 +107,12 @@ class CompactedDBImpl : public DBImpl {
     return Status::NotSupported("Not supported in compacted db mode.");
   }
 
+  using DBImpl::CXLFlush;
+  virtual Status CXLFlush(const FlushOptions& /*options*/,
+                          ColumnFamilyHandle* /*column_family*/) override {
+    return Status::NotSupported("Not supported in compacted db mode.");
+  }
+
   virtual Status SyncWAL() override {
     return Status::NotSupported("Not supported in compacted db mode.");
   }

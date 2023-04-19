@@ -30,7 +30,9 @@ class SkipListRep : public MemTableRep {
         skip_list_(compare, allocator),
         cmp_(compare),
         transform_(transform),
-        lookahead_(lookahead) {}
+        lookahead_(lookahead) {
+    LOG("SkipListRep construct, ptr =", this);
+  }
 
   KeyHandle Allocate(const size_t len, char** buf) override {
     *buf = skip_list_.AllocateKey(len);

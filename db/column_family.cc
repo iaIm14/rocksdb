@@ -1101,8 +1101,13 @@ uint64_t ColumnFamilyData::GetLiveSstFilesSize() const {
 
 MemTable* ColumnFamilyData::ConstructNewMemtable(
     const MutableCFOptions& mutable_cf_options, SequenceNumber earliest_seq) {
-  return new MemTable(internal_comparator_, ioptions_, mutable_cf_options,
-                      write_buffer_manager_, earliest_seq, id_);
+  LOG("ColumnFamilyData::ConstructNewMemtable begin Alloc memtable");
+  auto* memtable_ =
+      new MemTable(internal_comparator_, ioptions_, mutable_cf_options,
+                   write_buffer_manager_, earliest_seq, id_);
+  LOG("ColumnFamilyData::ConstructNewMemtable Alloc memtable finish: ptr =",
+      static_cast<void*>(memtable_), ' ', memtable_->GetID());
+  return memtable_;
 }
 
 void ColumnFamilyData::CreateNewMemtable(

@@ -5,7 +5,6 @@
 
 #pragma once
 
-
 #include <string>
 #include <vector>
 
@@ -118,6 +117,11 @@ class DBImplReadOnly : public DBImpl {
                        ColumnFamilyHandle* /*column_family*/) override {
     return Status::NotSupported("Not supported operation in read only mode.");
   }
+  using DBImpl::CXLFlush;
+  virtual Status CXLFlush(const FlushOptions& /*options*/,
+                          ColumnFamilyHandle* /*column_family*/) override {
+    return Status::NotSupported("Not supported operation in read only mode.");
+  }
 
   using DBImpl::SyncWAL;
   virtual Status SyncWAL() override {
@@ -163,4 +167,3 @@ class DBImplReadOnly : public DBImpl {
   friend class DB;
 };
 }  // namespace ROCKSDB_NAMESPACE
-

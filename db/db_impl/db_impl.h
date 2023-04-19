@@ -53,6 +53,7 @@
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
 #include "rocksdb/memtablerep.h"
+#include "rocksdb/options.h"
 #include "rocksdb/status.h"
 #include "rocksdb/trace_reader_writer.h"
 #include "rocksdb/transaction_log.h"
@@ -426,12 +427,20 @@ class DBImpl : public DB {
   virtual Options GetOptions(ColumnFamilyHandle* column_family) const override;
   using DB::GetDBOptions;
   virtual DBOptions GetDBOptions() const override;
+  using DB::CXLFlush;
+  virtual Status CXLFlush(const FlushOptions& options,
+                          ColumnFamilyHandle* column_family) override;
+  virtual Status CXLFlush(
+      const FlushOptions& options,
+      const std::vector<ColumnFamilyHandle*>& column_families) override;
+
   using DB::Flush;
   virtual Status Flush(const FlushOptions& options,
                        ColumnFamilyHandle* column_family) override;
   virtual Status Flush(
       const FlushOptions& options,
       const std::vector<ColumnFamilyHandle*>& column_families) override;
+
   virtual Status FlushWAL(bool sync) override;
   bool WALBufferIsEmpty();
   virtual Status SyncWAL() override;
@@ -2065,6 +2074,7 @@ class DBImpl : public DB {
                             FlushReason flush_reason, FlushRequest* req);
 
   void SchedulePendingFlush(const FlushRequest& req);
+  void SchedulePendingFlushUseShrMem(const FlushRequest& req);
 
   void SchedulePendingCompaction(ColumnFamilyData* cfd);
   void SchedulePendingPurge(std::string fname, std::string dir_to_sync,
@@ -2529,6 +2539,7 @@ class DBImpl : public DB {
   // invariant(column family present in flush_queue_ <==>
   // ColumnFamilyData::pending_flush_ == true)
   std::deque<FlushRequest> flush_queue_;
+  std::deque<FlushRequest> cxl_flush_queue_;
   // invariant(column family present in compaction_queue_ <==>
   // ColumnFamilyData::pending_compaction_ == true)
   std::deque<ColumnFamilyData*> compaction_queue_;
